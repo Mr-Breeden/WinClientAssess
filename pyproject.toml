@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wca"
+version = "2.0.5"
+description = "WCA — Windows Client Assessment framework for installable and portable Windows thick-client security assessments"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Matthew B." }
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows :: Windows 11",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+dependencies = [
+  "rich>=13.7.0",
+  "pefile>=2023.2.7",
+  "psutil>=5.9.8",
+]
+
+[project.scripts]
+wca = "wca:main"
+
+[tool.setuptools]
+py-modules = ["wca"]
+packages = ["modules", "utils", "gui"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.txt", "*.md"]
+
+"gui" = ["*.html", "*.css", "*.js"]

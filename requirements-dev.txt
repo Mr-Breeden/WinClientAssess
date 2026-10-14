@@ -1,0 +1,3 @@
+# Opt-in: testing and release validation only. Not needed to run assessments.
+-r requirements.txt
+pytest>=8.0,<10
