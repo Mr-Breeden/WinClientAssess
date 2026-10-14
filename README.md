@@ -31,15 +31,6 @@ The GUI prints a private local URL; keep the complete `#session=` fragment. Keep
 
 **Core:** Python 3.10+, Windows PowerShell, 7-Zip, dependencies in `requirements.txt`. Recommended integrated utilities include Sysinternals Procmon/AccessChk/Handle/ListDLLs, Detect It Easy, lessmsi and ILSpyCmd (with a suitable .NET SDK). Some utilities need elevation; absent optional utilities degrade specific coverage rather than implying a vulnerability. See [Optional Tools](docs/optional-tools.md), [Windows Setup](docs/windows-environment-setup.md), and [Tool Readiness in the GUI](docs/gui-guide.md). `install_dependencies.ps1` installs Python packages, **not** third-party desktop tools.
 
-## Verification and release acceptance
-
-```powershell
-.\install_dependencies.ps1 -TestDependencies
-.\scripts\validate_windows.ps1
-python .\wca.py --backend-action capabilities --backend-format text
-```
-
-The validation script enforces Python exit codes, runs the test suite and release audit, and checks CLI/backend metadata. A full Windows GUI/Procmon acceptance test is separate; see [Windows Acceptance Checklist](docs/windows-validation.md). **v2.0.5 is a release candidate until your Windows 11 testing passes.** The v2.0.4 assessment is the last Windows-observed end-to-end reference; v1.9.6 remains the established CLI baseline.
 
 ## Documentation
 
