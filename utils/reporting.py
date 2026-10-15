@@ -304,6 +304,8 @@ class AssessmentReporter:
             "  that is different from SKIPPED / NOT COLLECTED or COLLECTION UNAVAILABLE.",
         ]
         self.write_text("coverage_summary.txt", "\n".join(coverage_lines).rstrip() + "\n")
+        from utils.collection_provenance import finalize as finalize_provenance
+        finalize_provenance(self.assessment_dir, self.status, self.installer)
         generate_consolidated_report(
             assessment_dir=self.assessment_dir,
             assessment_name=self.assessment_name,

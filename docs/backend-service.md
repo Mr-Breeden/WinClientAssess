@@ -1,4 +1,4 @@
-# WCA v2.0.5 — Backend Service and Local GUI
+# WCA v2.1.0 — Backend Service and Local GUI
 
 ## Scope and non-goals
 
@@ -24,7 +24,7 @@ python .\wca.py --backend-action review --backend-assessment C:\Assessments\Case
 python .\wca.py --backend-action appendix_readiness --backend-assessment C:\Assessments\Case
 ```
 
-## Optional human-readable output (v2.0.5)
+## Optional human-readable output (v2.1.0)
 
 The CLI defaults to a **single-line JSON object** so the GUI and automation remain compatible. Add `--backend-format text` to show a compact human-readable view without changing the backend response schema:
 
@@ -68,7 +68,7 @@ Mutation calls are **not** exposed on the JSON CLI. The local GUI transport enfo
 
 ## State transitions and compatibility
 
-Existing structured assessment manifests retain schema 1, review state retains its established IDs/schema, and artifact catalog/methodology remain 1.9. v2.0.5 **does not rewrite old state on read**. Completed, intact v1.9.2 and completed v1.9.3 assessments can be inspected, verified and exported without migration. Unfinished prior-version checkpoints remain readable but **cross-version resume is blocked**; use the original version on an unchanged snapshot VM or begin a fresh assessment. Legacy flat assessments are identified but not silently converted.
+Existing structured assessment manifests retain schema 1, review state retains its established IDs/schema, and artifact catalog/methodology remain 1.9. v2.1.0 **does not rewrite old state on read**. Completed, intact v1.9.2 and completed v1.9.3 assessments can be inspected, verified and exported without migration. Unfinished prior-version checkpoints remain readable but **cross-version resume is blocked**; use the original version on an unchanged snapshot VM or begin a fresh assessment. Legacy flat assessments are identified but not silently converted.
 
 Status reports the saved stage transitions (`PENDING`, `STARTED`, `COMPLETED`) and recovery action; it does not invent additional persistent lifecycle states. Allowed actions are derived from integrity/status, not trusted from stored user-supplied values. `VALIDATED` is a tester decision, not independent evidence of exploitation. The service requires an exact fingerprint on review changes to refuse decisions against changed evidence.
 
@@ -80,6 +80,6 @@ Each WCA mutation obtains an exclusive per-assessment OS file lock **beside** th
 
 Regression tests cover JSON safety, absence of tester paths, existing assessment version read-compatibility, pending review fingerprint refusal, output confirmation, review integrity, lock contention, safe export and preservation of source bytes. Install opt-in test dependencies first (`.\install_dependencies.ps1 -TestDependencies`), then run `python -m pytest -q` and `scripts/validate_windows.ps1`, then compare CLI vs JSON status on an intact completed v1.9.2 assessment. GUI HTTP access-control tests are additional, but they do not replace native Windows acceptance or a deployment security review.
 
-## v2.0.5 local GUI transport
+## v2.1.0 local GUI transport
 
 Use `python .\wca.py --gui` (default `127.0.0.1:9001`), or `--port 9002`. The stdlib HTTP adapter is described in [`gui-guide.md`](gui-guide.md). JSON backend schema remains `1.0`. Explicit GUI mutations require a session token, same-origin local request, tester confirmation, per-assessment lock and backend integrity gates. GUI collection now redirects the original engine through an in-browser checkpoint protocol; the separate CLI remains available for terminal use.

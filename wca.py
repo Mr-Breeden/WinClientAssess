@@ -63,9 +63,9 @@ from utils.client_appendix import export_client_appendix, ClientAppendixError
 from utils.operation_lock import assessment_operation, AssessmentBusyError
 from utils.backend_service import BackendService
 
-VERSION = "2.0.5"
+VERSION = "2.1.0"
 METHODOLOGY_VERSION = "1.9"
-ARTIFACT_CATALOG_VERSION = "1.9"
+ARTIFACT_CATALOG_VERSION = "2.0"
 PRODUCT_SHORT = "WCA"
 PRODUCT_NAME = "Windows Client Assessment"
 AUTHOR = "Matthew B."
@@ -676,7 +676,9 @@ def show_tool_status(tools):
 def run_module(reporter, name, func, *args, **kwargs):
     console.print(f"\n[cyan][+][/cyan] {name}")
     try:
-        result = func(*args, **kwargs) or {}
+        from utils.collection_provenance import module_scope
+        with module_scope(name):
+            result = func(*args, **kwargs) or {}
         status = result.get("status", "PASS") if isinstance(result, dict) else "PASS"
         details = result.get("details", "") if isinstance(result, dict) else ""
         if isinstance(result, dict):
@@ -686,6 +688,10 @@ def run_module(reporter, name, func, *args, **kwargs):
                 reporter.add_finding(**finding_with_source)
         coverage_gap = result.get("coverage_gap", False) if isinstance(result, dict) else False
         reporter.set_status(name, status, details, coverage_gap=coverage_gap)
+        from utils.collection_provenance import record_native_method
+        record_native_method(name, getattr(func, '__name__', 'internal collector'),
+                             status=('SKIPPED' if status in {'SKIPPED', 'NOT APPLICABLE'} else
+                                     'FAILED' if status == 'ERROR' else 'COMPLETED'))
         return result if isinstance(result, dict) else {"status": status}
     except Exception as exc:
         reporter.set_status(name, "ERROR", str(exc))
@@ -856,6 +862,14 @@ def main():
 
 def _run_assessment_engine(args, installer, target_source, target_type, assessment_name,
                            assessment_dir, mode, state, resume_action):
+    from utils.collection_provenance import session
+    with session(assessment_dir, 'full-assessment' if mode == 'full' else 'static-assessment', retain=state is not None):
+        return _run_assessment_engine_impl(args, installer, target_source, target_type,
+                                           assessment_name, assessment_dir, mode, state, resume_action)
+
+
+def _run_assessment_engine_impl(args, installer, target_source, target_type, assessment_name,
+                                assessment_dir, mode, state, resume_action):
     """Existing v1.9.2 assessment orchestration, guarded by a per-assessment lock.
 
     Moving orchestration here does not modify module order, prompts, evidence

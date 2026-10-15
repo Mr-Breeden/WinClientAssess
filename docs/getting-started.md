@@ -1,8 +1,8 @@
-# WCA v2.0.5 — Getting Started
+# WCA v2.1.0 — Getting Started
 
 Start here for a concise walkthrough. For a new computer, follow [Clean Windows 11 VM Setup](windows-environment-setup.md) before these steps.
 
-1. Extract `WCA-v2.0.5.zip` into a local folder. Open **Windows PowerShell** in that folder; use an elevated session for Full mode/Procmon where required. Use a disposable VM snapshot before target installation.
+1. Extract `WCA-v2.1.0.zip` into a local folder. Open **Windows PowerShell** in that folder; use an elevated session for Full mode/Procmon where required. Use a disposable VM snapshot before target installation.
 2. Run ` .\install_dependencies.ps1 ` to install Python dependencies and verify 7-Zip. Install recommended external tools as described in [Optional Tools](optional-tools.md); configure a private `tool_paths.json` if WCA cannot find an executable automatically.
 3. Launch `python .\wca.py --gui`, leaving the hosting console running. WCA displays a private `http://127.0.0.1:9001/#session=...` URL. The GUI remains local; never share its access URL.
 4. Open **New Assessment**. Select installer (MSI/EXE) or portable target, Static/Full mode, output directory, and desired checkboxes. Static mode collects package evidence only. Full mode takes a baseline snapshot and waits for your explicit manual installation/activity confirmation.

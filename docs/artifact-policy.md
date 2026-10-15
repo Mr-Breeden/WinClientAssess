@@ -1,6 +1,6 @@
 # WCA artifact policy
 
-**Current artifact catalog:** 1.8
+**Current artifact catalog:** 2.0 (framework v2.1.0; historical 1.8 changes documented below)
 
 WCA keeps an artifact only when it has a distinct tester, evidence, correlation, integrity, recovery or reproducibility purpose.
 
@@ -33,6 +33,10 @@ Portable assessment artifacts should not persist tester username/hostname, perso
 
 ## Source release package
 
-The distributed source ZIP contains current source, canonical documentation, current regression tests, the current Windows validation script and operational `scripts/poc/` resources. It excludes generated/cache/build metadata, historical duplicate validation docs/scripts, prior release ZIP/checksum artifacts and temporary assessment output.
+The GitHub source ZIP contains current source, canonical documentation, current regression tests, the current Windows validation script and operational `scripts/poc/` resources. It excludes generated/cache/build metadata, historical duplicate validation docs/scripts, prior release ZIP/checksum artifacts and temporary assessment output.
 
-`scripts/package_release.py` enforces an explicit allowlist and fails closed on unexpected carryover.
+`scripts/package_release.py` enforces an explicit allowlist and fails closed on unexpected carryover. The separate minimal tester ZIP excludes tests, development/packaging tools, machine-specific configuration and generated assessment evidence while retaining assessment functionality and tester PoC helpers.
+
+### v2.1.0 collection provenance exception
+
+`reports/collection_provenance.txt` is the single authoritative human-readable provenance report. `working/collection_provenance_state.json` is **not** a duplicate report: it preserves append-only stable execution identifiers through later Guided Runtime sessions and derived-report regeneration. It is operational working state, integrity verified, and never included in the client export. Raw binary, CSV and JSON evidence must not have embedded provenance headers.

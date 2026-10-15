@@ -1,6 +1,6 @@
 # WCA assessment outputs
 
-**Artifact catalog:** 1.9
+**Artifact catalog:** 2.0
 
 WCA separates tester-facing interpreted reports under `reports/` from authoritative/supporting state under `working/`. A `.txt` report is preferred when it is the authoritative human-readable interpretation; JSON/CSV is retained only when it serves a distinct operational, integrity, recovery or evidence purpose.
 
@@ -19,6 +19,7 @@ WCA separates tester-facing interpreted reports under `reports/` from authoritat
 | `attack_surface_test_plan.txt` | Vendor-neutral Windows thick-client attack-surface methodology, including guided/unobserved/unavailable surfaces. |
 | `artifact_manifest.txt` | Human-readable artifact inventory. |
 | `tool_detection.txt` | Detected external-tool capabilities. |
+| `collection_provenance.txt` | Execution-derived sanitized command/method history with per-report record references. |
 
 ## Static/target artifacts
 
@@ -87,7 +88,7 @@ Where updater components are observed, WCA can retain updater component, permiss
 
 ## Internal state
 
-`working/assessment_state.json`, `working/assessment_manifest.json`, `working/tester_review_state.json`, render state and required structured target/runtime evidence are operational state, not client-facing findings.
+`working/assessment_state.json`, `working/assessment_manifest.json`, `working/tester_review_state.json`, `working/collection_provenance_state.json`, render state and required structured target/runtime evidence are operational state, not client-facing findings.
 
 ## Evidence-state semantics
 
@@ -96,3 +97,7 @@ Reports distinguish **OBSERVED**, **COLLECTED / NO OBSERVATION**, **NOT COLLECTE
 ## Client Appendix output (external)
 
 Client Appendix is deliberately a separate ZIP created **outside** the assessment tree. It is not a new authoritative tester report or assessment artifact; the source manifest and original reports remain unchanged. Its contents are strictly allowlisted: standalone `assessment_report.html`, `README.txt`, `SHA256SUMS.txt` and a small approved `evidence/*.txt` subset. See `client-appendix.md`.
+
+## Collection provenance (v2.1.0)
+
+Applicable `.txt` reports carry a concise Collection Provenance reference. See [Evidence Collection Provenance](collection-provenance.md) for command privacy, internal method attribution, record-ID stability, skipped modules and reproduction limitations. Raw binary/CSV/JSON evidence retains its original format.

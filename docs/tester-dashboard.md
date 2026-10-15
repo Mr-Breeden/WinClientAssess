@@ -1,4 +1,4 @@
-# WCA v2.0.5 — Offline tester dashboard
+# WCA v2.1.0 — Offline tester dashboard
 
 `reports/assessment_report.html` is the self-contained offline, printable, read-only tester dashboard generated from verified review and assessment state.
 

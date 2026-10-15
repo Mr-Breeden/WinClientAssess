@@ -144,6 +144,9 @@ def _replace_module_result(reporter: AssessmentReporter, module: str, result: di
         copied = dict(finding)
         copied.pop("source_module", None)
         reporter.add_finding(source_module=module, **copied)
+    from utils.collection_provenance import record_native_method
+    record_native_method(module, 'guided runtime evidence reanalysis',
+                         status='SKIPPED' if result.get('status') == 'SKIPPED' else 'COMPLETED')
     reporter.set_status(
         module,
         result.get("status", "PASS"),
@@ -280,6 +283,17 @@ def _integrate_runtime_analysis(root: Path, reporter: AssessmentReporter, result
 def run_guided_runtime(root: Path, *, version: str, methodology_version: str,
                        catalog_version: str, input_fn=input, output_fn=print,
                        interactive_collectors: bool = True, web_control=None) -> dict:
+    from utils.collection_provenance import session
+    with session(Path(root).expanduser().resolve(), 'guided-runtime'):
+        return _run_guided_runtime_impl(root, version=version,
+            methodology_version=methodology_version, catalog_version=catalog_version,
+            input_fn=input_fn, output_fn=output_fn,
+            interactive_collectors=interactive_collectors, web_control=web_control)
+
+
+def _run_guided_runtime_impl(root: Path, *, version: str, methodology_version: str,
+                             catalog_version: str, input_fn=input, output_fn=print,
+                             interactive_collectors: bool = True, web_control=None) -> dict:
     root = Path(root).expanduser().resolve()
     state, before = validate_guided_runtime_eligibility(root, version)
 
@@ -309,6 +323,9 @@ def run_guided_runtime(root: Path, *, version: str, methodology_version: str,
         controller_factory=(lambda targets, filters: (lambda **kw: web_control.capture(
             **kw, runtime_targets=targets, exclude_paths=filters))) if web_control else None,
     )
+    from utils.collection_provenance import record_native_method
+    record_native_method('Guided Runtime Observation', 'run_guided_collectors',
+                         status='COMPLETED' if result.get('summary') else 'UNAVAILABLE')
     staging_value = result.get("staging_dir")
     staging_dir = Path(staging_value) if staging_value else None
     try:
