@@ -29,7 +29,7 @@ Optional coverage gaps may still exist on a completed assessment; they must rema
 - `assessment_report.html` — portable offline technical overview with an evidence-grounded scope and footprint, grouped reviewed observations, theme switch and approved evidence navigation; no tester notes or confirmation claims;
 - `README.txt` — interpretation and provenance notice;
 - `SHA256SUMS.txt` — checksum for every other included file;
-- `evidence/*.txt` — present reports from a strict sanitized allowlist: application profile, coverage, signing, PE security, configuration, service, permissions, network and IPC summaries.
+- `evidence/*.txt` — present reports from a strict sanitized allowlist: application profile, coverage, signing, PE security, configuration, service, permissions, network and IPC summaries, plus `collection_provenance.txt` when present and integrity-verified.
 
 The export never includes secret-scanner details, raw/working Procmon records, snapshots, source/decompiled files, internal state/manifests, reviewer notes, or NOT APPLICABLE items. Only already generated and approved reports are copied. The original assessment tree, state, manifests and reviewer decisions are unchanged.
 
@@ -38,3 +38,7 @@ Inspect the client appendix for appropriate disclosure scope before sending it. 
 ## HTML presentation
 
 The client appendix defaults to a dark theme; a **Light theme** control toggles locally between two accessible palettes. No external scripts, fonts, images, or network calls are used. Only data from strictly approved sanitized reports is summarized. Metrics missing from approved evidence are shown as “Not recorded,” never guessed. Grouped review items remain observations, not verified findings.
+
+## Collection provenance
+
+The optional v2.1.0 [Collection Provenance](collection-provenance.md) report contains privacy-preserving invocation shapes and collector identifiers, never raw PowerShell scripts, positional arguments, environment variables, or secrets. The exporter includes this report only when present in the verified evidence allowlist and never exports `working/collection_provenance_state.json`. Review approved technical evidence for engagement-specific disclosure before delivery.

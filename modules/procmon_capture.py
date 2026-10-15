@@ -96,8 +96,12 @@ def _run_with_heartbeat(command, *, timeout: int, output_fn=print, verb: str = "
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
     except FileNotFoundError as exc:
+        from utils.collection_provenance import record_executed
+        record_executed(command, 127)
         return {"returncode": 127, "stdout": "", "stderr": str(exc), "elapsed_seconds": 0}
     except Exception as exc:
+        from utils.collection_provenance import record_executed
+        record_executed(command, 1)
         return {"returncode": 1, "stdout": "", "stderr": str(exc), "elapsed_seconds": 0}
 
     while True:
@@ -109,6 +113,8 @@ def _run_with_heartbeat(command, *, timeout: int, output_fn=print, verb: str = "
             except Exception:
                 pass
             stdout, stderr = proc.communicate()
+            from utils.collection_provenance import record_executed
+            record_executed(command, 124)
             return {
                 "returncode": 124,
                 "stdout": stdout or "",
@@ -117,6 +123,8 @@ def _run_with_heartbeat(command, *, timeout: int, output_fn=print, verb: str = "
             }
         try:
             stdout, stderr = proc.communicate(timeout=min(interval, remaining))
+            from utils.collection_provenance import record_executed
+            record_executed(command, proc.returncode)
             return {
                 "returncode": proc.returncode,
                 "stdout": stdout or "",
@@ -154,7 +162,23 @@ def _session_payload(*, started_at, stopped_at, pml: Path, controller_result: di
     }
 
 
-def run_procmon_capture(
+def run_procmon_capture(assessment_dir: Path, tools, capture_seconds: int = 0,
+                        interactive: bool = True, capture_controller=None,
+                        input_fn=input, output_fn=print, *,
+                        target_process_names=None, target_executable_paths=None):
+    # This is called both from initial assessment modules and directly by
+    # supplemental Guided Runtime; attribute actual Procmon commands in both.
+    from utils.collection_provenance import module_scope
+    with module_scope('Procmon Runtime Capture'):
+        return _run_procmon_capture_impl(
+            assessment_dir, tools, capture_seconds, interactive,
+            capture_controller, input_fn, output_fn,
+            target_process_names=target_process_names,
+            target_executable_paths=target_executable_paths,
+        )
+
+
+def _run_procmon_capture_impl(
     assessment_dir: Path,
     tools,
     capture_seconds: int = 0,
@@ -233,8 +257,12 @@ def run_procmon_capture(
             stderr=subprocess.DEVNULL,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        from utils.collection_provenance import record_executed
+        record_executed(command, 0)
         log.append("Capture start command issued successfully.")
     except Exception as exc:
+        from utils.collection_provenance import record_executed
+        record_executed(command, 1)
         log.append(f"Capture start failed: {exc}")
         log_path.write_text("\n".join(log) + "\n", encoding="utf-8")
         return {"status": "WARN", "details": f"Unable to start Procmon: {exc}", "csv_path": None, "pml_path": None}

@@ -10,7 +10,7 @@ function Invoke-CheckedPython {
     }
 }
 
-Write-Host 'WCA v2.0.5 Windows validation' -ForegroundColor Cyan
+Write-Host 'WCA v2.1.0 Windows validation' -ForegroundColor Cyan
 if (-not (Test-Path '.\requirements-dev.txt')) { throw 'requirements-dev.txt missing' }
 # install_dependencies.ps1 -TestDependencies or python -m pip install -r requirements-dev.txt
 Invoke-CheckedPython -Arguments @('-W','error','-m','compileall','-q','.')
@@ -19,11 +19,11 @@ Invoke-CheckedPython -Arguments @('.\scripts\package_release.py','--audit-only')
 
 $version = (Invoke-CheckedPython -Arguments @('.\wca.py','--version') | Out-String).Trim()
 Write-Host $version
-if ($version -notmatch 'WCA 2\.0\.5') { throw 'WCA 2.0.5 version string not detected' }
+if ($version -notmatch 'WCA 2\.1\.0') { throw 'WCA 2.1.0 version string not detected' }
 if ($version -notmatch 'Windows Client Assessment') { throw 'Full product name missing' }
 if ($version -notmatch 'Author: Matthew B\.') { throw 'Author metadata missing' }
 if ($version -notmatch 'methodology 1\.9') { throw 'Methodology 1.9 not detected' }
-if ($version -notmatch 'artifact catalog 1\.9') { throw 'Artifact catalog 1.9 not detected' }
+if ($version -notmatch 'artifact catalog 2\.0') { throw 'Artifact catalog 1.9 not detected' }
 $null = Invoke-CheckedPython -Arguments @('.\wca.py','--help')
 $rawCapabilities = Invoke-CheckedPython -Arguments @('.\wca.py','--backend-action','capabilities')
 $backend = ($rawCapabilities | Out-String | ConvertFrom-Json)
@@ -68,7 +68,7 @@ $required = @(
   '.\scripts\poc\marker_exe.c'
 )
 foreach ($path in $required) {
-  if (-not (Test-Path $path)) { throw "Required v2.0.5 artifact missing: $path" }
+  if (-not (Test-Path $path)) { throw "Required v2.1.0 artifact missing: $path" }
 }
 
 $forbidden = @('.\wca.egg-info', '.\build', '.\dist', '.\examples', '.\winclientassess.py')

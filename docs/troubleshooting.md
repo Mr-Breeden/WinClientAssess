@@ -42,7 +42,7 @@ Current packages exclude historical duplicate validation files, `*.egg-info`, bu
 
 Original imported evidence and extracted third-party payloads can contain sensitive data outside WCA's recognized sanitization patterns. Keep complete assessment folders access-controlled and do not treat them as client-ready exports.
 
-## Procmon active but GUI statistics unavailable (corrected v2.0.5)
+## Procmon active but GUI statistics unavailable (corrected v2.1.0)
 
 Windows antivirus or another local process may transiently prevent replacement of temporary GUI-only `telemetry.json`. The corrected worker issues a sanitized warning and keeps Procmon capture running; use the Stop Guided Runtime Observation button when the capture checkpoint is active. Do not equate a momentary missing statistics card with a failed capture. After processing, verify that the Guided Runtime report records capture PASS and target-scoped Procmon events, with integrity PASS. If capture itself fails, preserve the assessment and logs; do not force a finding or recertify damaged evidence.
 
@@ -52,4 +52,4 @@ Open **Notifications** in the top bar. The error displays the attempted operatio
 
 ## Recent Assessments contains `case` test entries
 
-Prior v2.0.5 regression tests could register temporary test cases. The corrected package isolates its GUI test catalogs. Entries from an older run remain until removed manually: back up `%LOCALAPPDATA%\WCA\gui_recent.json` and remove only that tester-local index while the GUI is stopped; this does not remove assessment evidence. Reopen valid assessment directories to re-register them.
+Prior v2.1.0 regression tests could register temporary test cases. The corrected package isolates its GUI test catalogs. Entries from an older run remain until removed manually: back up `%LOCALAPPDATA%\WCA\gui_recent.json` and remove only that tester-local index while the GUI is stopped; this does not remove assessment evidence. Reopen valid assessment directories to re-register them.

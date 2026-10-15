@@ -1,6 +1,6 @@
 # External Tool Installation Guide — Windows 11
 
-**Windows Client Assessment v2.0.5**  
+**Windows Client Assessment v2.1.0**  
 **Official-source links last reviewed:** 2026-08-24
 
 Windows Client Assessment categorizes external tools by both **dependency level** and **usage**. A tool can be useful even when the framework does not invoke it automatically.

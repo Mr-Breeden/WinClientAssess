@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# WinClientAssess workstation-specific configuration
+tool_paths.json
+
+# Generated assessment output
+assessments/
+reports/
+
+# Procmon / capture evidence
+*.pml
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.bak
+~$*
+
+# WCA evidence and locally generated release archives
+working/
+ClientAppendix/
+*-ClientAppendix/
+*.zip
+*.sha256
+*.sha256.txt
+*.pml
+*.log
+.env
+.env.*

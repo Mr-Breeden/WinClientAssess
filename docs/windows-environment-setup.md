@@ -1,7 +1,7 @@
-# WCA v2.0.5 — Clean Windows 11 Assessment VM Setup Guide
+# WCA v2.1.0 — Clean Windows 11 Assessment VM Setup Guide
 
-**Applies to:** WCA v2.0.5, Windows 11 x64, PowerShell, authorized thick-client security assessments  
-**Scope:** Preparation, tool installation, detection and validation. This guide ships with the WCA v2.0.5 source release.
+**Applies to:** WCA v2.1.0, Windows 11 x64, PowerShell, authorized thick-client security assessments  
+**Scope:** Preparation, tool installation, detection and validation. This guide ships with the WCA v2.1.0 source release.
 
 > WCA does not automatically execute PoCs or install/launch/exercise assessment targets. Install external analysis tools from approved sources and retain a clean VM snapshot. Do not disable endpoint protections by default.
 
@@ -20,7 +20,7 @@
 | Python **3.10+** (x64) | Yes | WCA CLI and collectors | https://www.python.org/downloads/windows/ |
 | Windows PowerShell | Yes | Windows-native inspection and collectors | Included with Windows 11; confirm PowerShell runs |
 | 7-Zip (x64) | Required by WCA tool detection | Archive/package extraction | https://www.7-zip.org/download.html |
-| WCA v2.0.5 source release | Yes | Assessment engine, modules and documentation | Approved WCA release ZIP |
+| WCA v2.1.0 source release | Yes | Assessment engine, modules and documentation | Approved WCA release ZIP |
 | .NET SDK (supported x64 release) | Recommended for managed targets | Installs ILSpyCmd and .NET diagnostics | https://dotnet.microsoft.com/download |
 
 Install Python with the launcher `py.exe` available. Install 7-Zip to the normal location (`C:\Program Files\7-Zip\7z.exe`) unless you have an organizational standard. Verify:
@@ -35,7 +35,7 @@ Get-Command powershell.exe
 
 ## 3. Extract WCA and install Python dependencies
 
-Open PowerShell in the **extracted** WCA v2.0.5 directory (not inside the ZIP):
+Open PowerShell in the **extracted** WCA v2.1.0 directory (not inside the ZIP):
 
 ```powershell
 .\install_dependencies.ps1
@@ -137,7 +137,7 @@ Adjust executable names to the exact official ZIP contents and your environment.
 
 ## 7. Validate the installed environment
 
-In the WCA v2.0.5 directory with `.venv` activated:
+In the WCA v2.1.0 directory with `.venv` activated:
 
 ```powershell
 python -c "import rich,pefile,psutil; print('Core Python dependencies OK')"
@@ -149,7 +149,7 @@ python .\wca.py
 
 On the interactive CLI, check the **Tool Detection** table. Confirm required tools are `FOUND`, recommended integrations you installed are `FOUND`, and missing manual-only tools show expected optional coverage limitations. For release validation, install test dependencies explicitly with `.\install_dependencies.ps1 -TestDependencies` or `python -m pip install -r requirements-dev.txt` before running `python -m pytest -q`.
 
-**v2.0.5 validation:** `scripts/validate_windows.ps1` explicitly checks each Python exit code and fails closed if a command fails.
+**v2.1.0 validation:** `scripts/validate_windows.ps1` explicitly checks each Python exit code and fails closed if a command fails.
 
 ## 8. Take your ready-to-test snapshot
 
@@ -177,13 +177,13 @@ Then start with `python .\wca.py`, select **installable** or **portable** and **
 - `tool_paths.example.json` — canonical detection override-key examples
 - `README.md` — commands and assessment lifecycle
 
-This guide describes the shipped v2.0.5 behavior; tool vendors' installers and support requirements can change. Confirm current upstream instructions and your organization's software approval policy before installing externally sourced binaries.
+This guide describes the shipped v2.1.0 behavior; tool vendors' installers and support requirements can change. Confirm current upstream instructions and your organization's software approval policy before installing externally sourced binaries.
 
-### v2.0.5 validation and readable backend
+### v2.1.0 validation and readable backend
 
 The local `tool_paths.json` file is expected when testers configure non-default tool locations; `scripts/validate_windows.ps1` will not reject that file. WCA release packaging still excludes it. For readable manual checks use `python .\wca.py --backend-action tool_readiness --backend-format text`. JSON remains the default for machine integrations.
 
-## v2.0.5 clean-install acceptance record
+## v2.1.0 clean-install acceptance record
 
 On the fresh Windows 11 VM, record the WCA `--version` output, PowerShell version, Python version, required/recommended Tool Readiness results, successful `validate_windows.ps1` completion, and a brief GUI workflow result. The tool displays detected utilities; where executable version metadata cannot be verified, it reports **Not verified** rather than guessing. Elevated permissions may be needed for native Windows capture and symlink security-regression tests; follow enterprise policy. Never package `tool_paths.json`, tester private paths, output folders, or target binaries with WCA.
 

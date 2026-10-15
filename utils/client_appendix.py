@@ -33,6 +33,7 @@ APPROVED_REPORTS = (
     'binary_security_review.txt', 'configuration_review.txt',
     'services_review.txt', 'permissions_review.txt',
     'network_surface_review.txt', 'ipc_review.txt',
+    'collection_provenance.txt',
 )
 CRITICAL_STAGES = ('static_analysis', 'reporting', 'complete')
 FULL_CRITICAL_STAGES = ('pre_install_snapshot', 'post_install_snapshot', 'installed_state_analysis')

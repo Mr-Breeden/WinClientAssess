@@ -2,7 +2,7 @@
 
 WCA supports interactive and CLI-driven static/full Windows client assessments. The primary launcher is `wca.py`; `pip install .` also exposes the `wca` console command.
 
-## Local browser GUI (v2.0.5)
+## Local browser GUI (v2.1.0)
 
 ```powershell
 python .\wca.py --gui
@@ -162,6 +162,6 @@ python .\wca.py --client-appendix 'C:\Assessments\Client-Full' --appendix-output
 
 This is a copy-only, gated technical appendix, not a vulnerability report. Export requires a completed, integrity-PASS assessment and fully processed Guided Review with no pending or changed-evidence conditions. The destination must be outside the source assessment. See `client-appendix.md`.
 
-## JSON-safe status and tool readiness (v2.0.5)
+## JSON-safe status and tool readiness (v2.1.0)
 
 For a read-only frontend, use `python .\wca.py --backend-action capabilities` and `--backend-action status --backend-assessment C:\Assessments\Case`. Other read-only operations: `tool_readiness`, `verify`, `review`, `appendix_readiness`. JSON output contains `schema`, `ok`, `code`, `message`, `data`, and `errors`; this does not launch a GUI. See `docs/backend-service.md`.

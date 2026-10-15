@@ -3,6 +3,8 @@ from __future__ import annotations
 # Central artifact catalog used by cleanup and applicability logic.
 # Add new framework-generated outputs here first so cleanup/reporting logic stays synchronized.
 ARTIFACTS = {
+    'collection_provenance': {"filename": 'collection_provenance.txt', "phase": 'reporting', "primary": True},
+    'collection_provenance_state': {"filename": 'working/collection_provenance_state.json', "phase": 'reporting', "primary": False, "internal": True},
     'assessment_manifest': {"filename": "working/assessment_manifest.json", "phase": "reporting", "primary": False, "internal": True},
     'tester_review_state': {"filename": "working/tester_review_state.json", "phase": "reporting", "primary": False, "internal": True},
     'tester_review': {"filename": "tester_review.txt", "phase": "reporting", "primary": True},

@@ -27,7 +27,7 @@ TOP_LEVEL_FILES = {
 TOP_LEVEL_DIRS = {"docs", "gui", "modules", "scripts", "tests", "utils"}
 LOCAL_CONFIG_FILES = {"tool_paths.json"}  # user machine paths; never packaged
 CANONICAL_DOCS = {
-    "artifact-policy.md", "assessment-integrity.md", "assessment-lifecycle.md",
+    "artifact-policy.md", "collection-provenance.md", "assessment-integrity.md", "assessment-lifecycle.md",
     "client-appendix.md", "backend-service.md", "gui-guide.md",
     "guided-review.md", "guided-runtime.md", "getting-started.md", "installation.md",
     "attack-surface-coverage.md", "methodology.md", "optional-tools.md",

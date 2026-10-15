@@ -1,13 +1,13 @@
 # WCA — Windows Client Assessment
 
-**Version:** v2.0.5 · **Author:** Matthew B. · **OS:** Windows 11 x64 · **Deployment:** locally hosted browser GUI and CLI
+**Version:** v2.1.0 · **Author:** Matthew B. · **OS:** Windows 11 x64 · **Deployment:** locally hosted browser GUI and CLI
 
-WCA supports authorized assessments of Windows installable MSI/EXE clients and portable EXE/application directories. It combines static analysis, tester-controlled installation snapshots, Windows runtime and IPC inspection, Guided Review, evidence integrity, and a separately sanitized Client Appendix. The default GUI runs locally on `127.0.0.1:9001` with offline assets. It does **not** automatically install, launch, authenticate to, or exploit targets; testers control every target action and PoC.
+WCA supports authorized assessments of Windows installable MSI/EXE clients and portable EXE/application directories. It combines static analysis, tester-controlled installation snapshots, Windows runtime and IPC inspection, Guided Review, evidence integrity, execution-derived collection provenance and a separately sanitized Client Appendix. The default GUI runs locally on `127.0.0.1:9001` with offline assets. It does **not** automatically install, launch, authenticate to, or exploit targets; testers control every target action and PoC.
 
 ## Get started on a Windows 11 VM
 
 1. Follow [Clean Windows VM Setup](docs/windows-environment-setup.md) for OS preparation, required and optional tools, Python, Sysinternals, and snapshot guidance. For the short version see [Getting Started](docs/getting-started.md).
-2. Extract **WCA-v2.0.5.zip** to a tester-approved directory. Never run it from inside the archive. Copy `tool_paths.example.json` to `tool_paths.json` **only when custom paths are needed**; do not include that private file in a release or client deliverable.
+2. Extract **WCA-v2.1.0.zip** to a tester-approved directory. Never run it from inside the archive. Copy `tool_paths.example.json` to `tool_paths.json` **only when custom paths are needed**; do not include that private file in a release or client deliverable.
 3. Open Windows PowerShell in the WCA directory. Full system-state and Procmon workflows require elevation.
 
 ```powershell
@@ -31,6 +31,19 @@ The GUI prints a private local URL; keep the complete `#session=` fragment. Keep
 
 **Core:** Python 3.10+, Windows PowerShell, 7-Zip, dependencies in `requirements.txt`. Recommended integrated utilities include Sysinternals Procmon/AccessChk/Handle/ListDLLs, Detect It Easy, lessmsi and ILSpyCmd (with a suitable .NET SDK). Some utilities need elevation; absent optional utilities degrade specific coverage rather than implying a vulnerability. See [Optional Tools](docs/optional-tools.md), [Windows Setup](docs/windows-environment-setup.md), and [Tool Readiness in the GUI](docs/gui-guide.md). `install_dependencies.ps1` installs Python packages, **not** third-party desktop tools.
 
+## Verification and release acceptance
+
+```powershell
+.\install_dependencies.ps1 -TestDependencies
+.\scripts\validate_windows.ps1
+python .\wca.py --backend-action capabilities --backend-format text
+```
+
+The validation script enforces Python exit codes, runs the test suite and release audit, and checks CLI/backend metadata. A full Windows GUI/Procmon acceptance test is separate; see [Windows Acceptance Checklist](docs/windows-validation.md). **v2.1.0 was accepted as the project baseline on October 15, 2026**, following 427/427 Windows regression tests, a PASS release audit, and review of the full-mode Windows assessment and Client Appendix artifacts. This baseline designation is not a claim that all live GUI acceptance cases or clean-VM walkthroughs have been completed. Those checks remain documented in the Windows acceptance checklist.
+
+## Evidence provenance (v2.1.0 accepted baseline)
+
+Applicable technical evidence `.txt` reports (not summaries, test cases, or tester review) now reference a central `reports/collection_provenance.txt` with the **actual tools and sanitized command structures** recorded during assessment. Where a curated read-only live-recheck command exists, it is explicitly labeled as an independent manual example, not as an executed WCA command. Native Python analysis and skipped collectors are differentiated from external invocations; raw PowerShell scripts and sensitive arguments are never retained. The separate working-state JSON preserves stable execution references through Guided Runtime and review regeneration, and the Client Appendix receives only the allowlisted sanitized `.txt`. See [Collection Provenance](docs/collection-provenance.md).
 
 ## Documentation
 

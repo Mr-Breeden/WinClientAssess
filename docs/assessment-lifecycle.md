@@ -41,6 +41,6 @@ Completed assessments report no recovery action unless safe derived-report regen
 
 Legacy flat assessments remain readable where supported but are not silently overwritten or converted.
 
-## v2.0.5 state contract for CLI and local GUI
+## v2.1.0 state contract for CLI and local GUI
 
 `BackendService.execute("status", assessment_dir)` exposes the existing checkpoint state and derived eligible actions without persisting a second state format. Read-only status/integrity calls do not mutate assessment evidence. Interrupted assessments from a different framework version are **not** resumed silently; use the original version on the unchanged VM. Mutations acquire an advisory per-assessment exclusive lock and recheck integrity when applicable. See `docs/backend-service.md`.
