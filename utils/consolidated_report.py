@@ -530,7 +530,7 @@ def generate_consolidated_report(
     # in the report body/evidence index instead of consuming a second nav row.
     nav = [
         '<a href="#overview">Overview</a>', '<a href="#action-center">Action center</a>',
-        '<a href="#guided-review">Guided review</a>', '<a href="#guided-runtime">Runtime</a>',
+        '<a href="#guided-review">Guided review</a>', '<a href="#manual-testing">Manual testing</a>', '<a href="#guided-runtime">Runtime</a>',
         '<a href="#coverage-gaps">Coverage</a>', '<a href="#evidence-index">Evidence library</a>',
     ]
     navigation_html = "".join(nav)
@@ -604,6 +604,7 @@ def generate_consolidated_report(
   <main>
     <p class="notice"><strong>Tester interpretation required:</strong> automated observations and reviewer dispositions are not independently confirmed vulnerabilities. Use the linked evidence and validation guidance before client reporting.</p>
     <section id="action-center"><h2>Tester Action Center</h2>{_action_center(review_state, assessment_dir, coverage, status)}</section>
+    <section id="manual-testing"><h2>Manual Security Test Cases</h2><p class="muted"><strong>Collection COMPLETE is not Security Testing COMPLETE.</strong> Use the local WCA v2.2.0 GUI Tester Workspace > Testing Queue to complete the applicable manual procedures and related Guided Review candidates in one place. A manual status does not close an activity while linked Guided Review candidates remain pending. Generated test cases and the attack-surface plan are supporting references, not additional checklists. This offline HTML dashboard is read-only and does not display current live testing progress.</p><div class="link-list">{_file_link("test_cases.txt", assessment_dir, "Optional offline test-case reference")}{_file_link("attack_surface_test_plan.txt", assessment_dir, "Optional full attack-surface methodology")}{_file_link("coverage_summary.txt", assessment_dir, "Open collection coverage")}</div></section>
     <section id="application-profile"><h2>Application / Technology Profile</h2>{_extract_profile(assessment_dir, status, installer, mode)}</section>
     <section id="guided-review"><h2>Guided Tester Review</h2><p class="muted">Select a condition to inspect its disposition, supporting evidence and optional validation instructions. Review decisions are edited through the CLI, not this HTML file.</p>{_review_workspace(_candidate_cards(review_state, assessment_dir))}</section>
     <section id="coverage-gaps"><h2>Coverage Gaps and Limitations</h2>{_coverage_gaps(status, coverage)}</section>

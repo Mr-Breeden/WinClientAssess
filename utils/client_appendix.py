@@ -18,6 +18,7 @@ from urllib.parse import quote
 from utils.assessment_integrity import verify_assessment
 from utils.assessment_state import AssessmentState
 from utils.guided_review import read_review
+from utils.manual_test_workflow import _snapshot as read_manual_snapshot
 from utils.privacy import sanitize_report_text
 from utils.html_theme import THEME_CSS, THEME_SCRIPT, csp, toggle
 
@@ -79,19 +80,46 @@ def export_readiness(root: Path) -> tuple[dict, dict, list[dict]]:
     return state.data, integrity['manifest'], items
 
 
+def client_note_preview(root: Path) -> list[dict]:
+    """Authenticated-only projection of explicitly approved notes, never private notes.
+
+    Does not require Appendix eligibility because the tester may want to edit
+    notes while Guided Review candidates are still pending.
+    """
+    root = Path(root)
+    if verify_assessment(root).get('status') != 'PASS':
+        raise ClientAppendixError('Assessment integrity must PASS to preview client notes.')
+    notes = []
+    review = read_review(root) or {}
+    for item in review.get('items', {}).values():
+        if item.get('client_notes') and item.get('status') in ('VALIDATED','INFORMATIONAL','NOT APPLICABLE'):
+            notes.append({'id': item.get('id', ''), 'title': sanitize_report_text(item.get('title', ''))[:160],
+                          'notes': sanitize_report_text(item['client_notes'])[:4000]})
+    try:
+        manual = read_manual_snapshot(root, verified=False)
+        for item in manual['items']:
+            if item.get('client_notes'):
+                notes.append({'id': item['id'], 'title': item['title'],
+                              'notes': item['client_notes']})
+    except ValueError:
+        pass
+    return notes
+
+
 def _field(text: str, key: str, default: str = "Not recorded") -> str:
     """Extract one factual scalar from an already approved sanitized report."""
     found = re.search(r"^\s*" + re.escape(key) + r"\s*:\s*(.+?)\s*$", text, re.I | re.M)
     return found.group(1).strip() if found else default
 
 
-def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports: dict[str, str] | None = None) -> str:
+def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports: dict[str, str] | None = None, manual_notes: list[dict] | None = None) -> str:
     """Render a client-facing technical overview using only allowlisted report text.
 
     This is an evidence navigation and context summary, not a finding engine.
-    No tester notes, raw observations, executable content or unapproved records enter HTML.
+    Only explicitly marked client-facing notes enter HTML; internal notes never do.
     """
     reports = reports or {}
+    manual_notes = manual_notes or []
     profile = reports.get('application_profile.txt', '')
     coverage = reports.get('coverage_summary.txt', '')
     services = reports.get('services_review.txt', '')
@@ -128,13 +156,38 @@ def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports:
     for group, group_items in buckets.items():
         if not group_items:
             continue
-        rows = ''.join('<tr><td>' + _esc(item.get('source_module') or 'Unspecified area') + '</td><td>'
-                       + _esc(item.get('title') or 'Observation') + '</td><td>'
-                       + _esc('Reviewed' if item.get('status') == 'VALIDATED' else 'Informational')
-                       + '</td></tr>' for item in group_items)
+        rows = []
+        for item in group_items:
+            # Only link technical reports that survived the privacy allowlist;
+            # never reveal internal/withheld evidence filenames to the client.
+            source_reports = item.get('artifacts') if isinstance(item.get('artifacts'), list) else []
+            linked = [name for name in source_reports if isinstance(name, str) and name in evidence]
+            support = (' '.join(elink(name) for name in dict.fromkeys(linked)) if linked else
+                       'Detailed supporting evidence is not included in this sanitized appendix; '
+                       'consult the separate penetration-test report.')
+            rows.append('<tr><td>' + _esc(item.get('source_module') or 'Unspecified area') + '</td><td>'
+                        + _esc(item.get('title') or 'Observation') + '</td><td>'
+                        + _esc('Reviewed' if item.get('status') == 'VALIDATED' else 'Informational')
+                        + '</td><td>' + support + '</td></tr>')
         table_blocks.append('<details class="review-area"><summary>' + _esc(group) + ' <span class="count">' + str(len(group_items))
-                            + '</span></summary><div class="table-scroll"><table><thead><tr><th>Source area</th><th>Observation</th><th>Review status</th></tr></thead><tbody>'
-                            + rows + '</tbody></table></div></details>')
+                            + '</span></summary><div class="table-scroll"><table><thead><tr><th>Source area</th><th>Observation</th><th>Review status</th><th>Approved supporting evidence</th></tr></thead><tbody>'
+                            + ''.join(rows) + '</tbody></table></div></details>')
+    # Explicit client-facing notes are independent of report allowlist. Review
+    # candidate and manual-case notes never copy private tester notes/refs.
+    approved = []
+    for item in items:
+        if item.get('status') in ('VALIDATED', 'INFORMATIONAL', 'NOT APPLICABLE') and item.get('client_notes'):
+            approved.append((str(item.get('id') or ''), str(item.get('title') or ''), item['client_notes']))
+    for item in manual_notes:
+        if item.get('client_notes'):
+            approved.append((str(item.get('id') or ''), str(item.get('title') or ''), item['client_notes']))
+    note_panels = ''.join('<article class="panel surface-panel"><h3>' + _esc(key + ' — ' + title) +
+       '</h3><p style="white-space:pre-wrap">' + _esc(note) + '</p></article>'
+       for key, title, note in approved)
+    client_note_section = ('<section id="client-notes" class="section"><h2>Tester-approved assessment notes</h2>'
+       '<p class="section-intro">These optional client-facing comments were explicitly entered for this appendix. '
+       'Formal findings and evidence belong in the independent penetration-test report.</p>' + note_panels +
+       '</section>') if approved else ''
     docs = ''.join('<li>' + elink(name) + '</li>' for name in evidence)
     title = _esc(state.get('assessment_name') or 'Assessment')
     product = _field(profile, 'Product name')
@@ -185,13 +238,14 @@ main{padding-top:26px;padding-bottom:55px}h2{font-size:20px;margin:0 0 10px}h3{f
 <header class="masthead"><div class="container"><div class="topline"><span class="eyebrow">Windows Client Assessment · Client technical appendix · v{_esc(state.get('framework_version') or 'unknown')}</span>{toggle()}</div><h1>{title}</h1>
 <p>Reviewed technical context, observed system footprint and approved supporting evidence, organized by security area.</p><div class="subline">{_esc(product)} · {_esc(version)}</div>
 <div class="metadata"><span>{_esc(state.get('mode') or 'Unknown mode')}</span><span>{_esc((state.get('target') or {}).get('type') or 'Unknown target type')}</span><span>Offline technical appendix</span></div></div></header>
-<nav><div class="container"><a href="#overview">Overview</a><a href="#footprint">Technical footprint</a><a href="#observations">Reviewed observations</a><a href="#evidence">Evidence library</a></div></nav>
+<nav><div class="container"><a href="#overview">Overview</a><a href="#footprint">Technical footprint</a><a href="#observations">Reviewed observations</a>{'<a href="#client-notes">Approved notes</a>' if approved else ''}<a href="#evidence">Evidence library</a></div></nav>
 <main class="container"><section id="overview"><div class="summary-strip">
 <div class="metric"><span>Collection coverage</span><strong>{_esc(grade)}</strong></div><div class="metric"><span>Reviewed observations</span><strong>{len(relevant)}</strong></div><div class="metric"><span>Installed services</span><strong>{_esc(service_count)}</strong></div><div class="metric"><span>Bound network endpoints</span><strong>{_esc(listener_count)}</strong></div>
 </div><div style="margin-top:18px">{note}</div></section>
 <section id="footprint" class="section"><h2>Observed technical footprint</h2><p class="section-intro">Information below comes from approved, sanitized technical reports. Counts reflect what was observed, not a full security verdict.</p><div class="grid three">{feature_panels}</div></section>
 <section id="observations" class="section"><h2>Reviewed security observations</h2><p class="section-intro">Grouped by affected review area. These are review records; refer to supporting evidence for the underlying observation and independently verify any impact.</p>
 {''.join(table_blocks) or '<div class="panel">No reviewed observations eligible for export.</div>'}</section>
+{client_note_section}
 <section id="evidence" class="section"><h2>Supporting technical reports</h2><p class="section-intro">Only approved, sanitized text artifacts are included. Each link opens an offline file shipped inside this ZIP.</p>
 <ul class="evidence-list">{docs}</ul><p class="section-intro">Verify file integrity with SHA256SUMS.txt. No network, external fonts or JavaScript libraries are required.</p></section></main>
 <footer class="container footer">WCA client technical appendix · Offline and copy-only · Findings require independent substantiation.</footer><script>{THEME_SCRIPT}</script></body></html>"""
@@ -228,9 +282,17 @@ def export_client_appendix(root: Path, output_zip: Path) -> Path:
     if not included:
         raise ClientAppendixError('No approved sanitized technical reports were available.')
     filenames = [name.partition('/')[2] for name in sorted(included)]
+    # State is already integrity-verified. Older assessments without manual
+    # review records continue to export safely, with no invented notes.
+    try:
+        manual = read_manual_snapshot(root)
+        approved_manual = [item for item in manual['items'] if item.get('client_notes')]
+    except ValueError:
+        approved_manual = []
     included['assessment_report.html'] = _appendix_html(
         state, items, filenames, {name.partition('/')[2]: data.decode('utf-8')
-                                  for name, data in included.items() if name.startswith('evidence/')}
+                                  for name, data in included.items() if name.startswith('evidence/')},
+        manual_notes=approved_manual
     ).encode('utf-8')
     included['README.txt'] = (
         f"WCA v{state.get('framework_version') or 'unknown'} — CLIENT APPENDIX\n"

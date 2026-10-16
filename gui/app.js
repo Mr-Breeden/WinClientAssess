@@ -11,9 +11,12 @@ if (launchToken) {
 }
 const token = launchToken || sessionStorage.getItem('wcaGuiSessionToken') || '';
 const $ = id => document.getElementById(id);
-const state = {assessment: localStorage.getItem('wcaSelectedAssessment') || '', status: null, review: null, selectedReview: null, jobId: null, jobAssessment: null, jobKind: null, pollBusy: false, reviewCache: new Map(), reviewLoadedAt: 0, runtime: null, lastLog: null, captureWasActive: false, guideOpen: new Map()};
+const state = {assessment: localStorage.getItem('wcaSelectedAssessment') || '', status: null, review: null, selectedReview: null, jobId: null, jobAssessment: null, jobKind: null, pollBusy: false, reviewCache: new Map(), reviewLoadedAt: 0, runtime: null, lastLog: null, captureWasActive: false, guideOpen: new Map(), manual: null, selectedManual: null, workspacePane: 'overview', manualOverview: null, activeQueue: null, jobStarting: false};
 const notificationHistory = [];
 function notice(message, error = false) {
+  // Routine successes and informational actions belong in their owning workspace,
+  // not in global error notifications. The history counter tracks actionable issues.
+  if (!error) return;
   const detail = message instanceof Error ? message : null;
   const content = detail?.message || String(message);
   const entry = {operation:detail?.operation || (error?'GUI operation':'Information'),
@@ -74,15 +77,56 @@ async function backend(action,assessment = state.assessment){return request('/ap
 function makeTable(columns, rows){const tbl=el('table',undefined,'table');const thead=el('thead');const hrow=el('tr');columns.forEach(name=>hrow.appendChild(el('th',name)));thead.appendChild(hrow);tbl.appendChild(thead);const body=el('tbody');rows.forEach(row=>{const tr=el('tr');row.forEach(cell=>{const td=el('td');if(cell instanceof Node)td.appendChild(cell);else td.textContent=String(cell??'—');tr.appendChild(td);});body.appendChild(tr);});tbl.appendChild(body);return tbl;}
 function replace(node,content){node.replaceChildren(content);}
 function go(tab){
- document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+tab));
- document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.tab===tab));
- $('sectionLabel').textContent={dashboard:'Overview',new:'New assessment',review:'Guided review',reports:'Reports',tools:'Tool readiness',management:'Assessment Management',help:'Help & About'}[tab];
- // Notifications remain until explicitly dismissed; page switching must not hide failures.
- if(tab==='review' && (!state.review?.items || Date.now()-state.reviewLoadedAt>30000))loadReview();
- if(tab==='reports')loadReports();
- if(tab==='tools')loadTools();
- if(tab==='management')loadManagement();
- if(tab==='help')loadAbout();
+ const page=(tab==='review'||tab==='workflow')?'workspace':tab;
+ document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));
+ document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.tab===page));
+ $('sectionLabel').textContent={dashboard:'Overview',new:'New assessment',workspace:'Tester Workspace',reports:'Reports',tools:'Tool readiness',management:'Assessment Management',help:'Help & About'}[page];
+ if(page==='workspace'){
+  showWorkspacePane(tab==='review'||tab==='workflow'?'queue':state.workspacePane);
+ }
+ if(page==='reports')loadReports();
+ if(page==='tools')loadTools();
+ if(page==='management')loadManagement();
+ if(page==='help')loadAbout();
+}
+function showWorkspacePane(pane='overview'){
+ state.workspacePane=pane;
+ document.querySelectorAll('.workspace-pane').forEach(node=>{node.hidden=node.id!=='workspace-pane-'+pane;});
+ document.querySelectorAll('[data-workspace-pane]').forEach(button=>{
+  const active=button.dataset.workspacePane===pane;
+  button.classList.toggle('active',active);button.setAttribute('aria-pressed',String(active));
+ });
+ if(!state.assessment)return;
+ if(pane==='final'&&!$('workspaceAppendixOutput').value)$('workspaceAppendixOutput').value=$('appendixOutput').value;
+ if(pane==='final')loadClientNotesPreview();
+ if(pane==='review'&&(!state.review?.items||Date.now()-state.reviewLoadedAt>30000))loadReview();
+ if(pane==='manual'&&!state.manual)loadManualTests();
+ if(pane==='queue')loadTestingQueue();
+ renderWorkspaceSummary();
+}
+document.querySelectorAll('[data-workspace-pane]').forEach(button=>button.addEventListener('click',()=>showWorkspacePane(button.dataset.workspacePane)));
+document.querySelectorAll('[data-workspace-target]').forEach(button=>button.addEventListener('click',()=>showWorkspacePane(button.dataset.workspaceTarget)));
+$('workspaceRefresh').addEventListener('click',async()=>{if(!state.assessment)return notice('Select an assessment first.',true);
+ await refresh();await loadReview();await loadManualTests();renderTestingQueue();renderWorkspaceSummary();});
+function renderWorkspaceSummary(){
+ const status=state.status||{};const manual=state.manual||state.manualOverview||{};const review=state.review||{};
+ const queue=manual.testing_queue||{};
+ const done=Math.max(0,(review.total||0)-(review.pending||0));
+ const cards=[['Assessment',status.status||'Not loaded'],['Integrity',status.integrity?.status||'Not verified'],
+  ['Guided Review',review.total!==undefined?`${done}/${review.total} dispositioned`:'Open Guided Review to load'],
+  ['Testing activities',queue.total!==undefined?`${queue.resolved}/${queue.total} addressed`:'Open Testing Queue to load']];
+ const holder=$('workspaceProgress');holder.replaceChildren();
+ cards.forEach(([title,value])=>{const cell=el('div',undefined,'metric');cell.appendChild(el('span',title));cell.appendChild(el('strong',value));holder.appendChild(cell);});
+ set('workspaceNext',status.status!=='COMPLETED'?'Complete evidence collection first.':reviewNext(manual,review,status));
+ const checklist=$('workspaceFinalChecks');checklist.replaceChildren();
+ for(const [label,detail] of [
+  ['Collection',status.status==='COMPLETED'?'Completed; review coverage gaps':`Current state: ${status.status||'Unavailable'}`],
+  ['Integrity',status.integrity?.status==='PASS'?'PASS':'Not PASS — verify before exporting'],
+  ['Automated candidates',review.total===undefined?'Open Testing Queue to load':`${review.pending||0} pending`],
+  ['Testing activities',queue.total===undefined?'Open Testing Queue to load':`${queue.remaining||0} remaining, ${queue.pending_guided_review||0} WCR pending, ${manual.by_status?.BLOCKED||0} blocked`],
+  ['Additional scope','Consult the attack-surface plan as guidance within your testing activities; document engagement-specific tests in your separate pentest report'],
+  ['Client delivery','Use Generate Client Appendix below. Evidence integrity and review eligibility are checked automatically; incomplete manual testing is disclosed before export']
+ ]){const item=el('div',undefined,'workspace-check');item.appendChild(el('strong',label));item.appendChild(el('span',detail));checklist.appendChild(item);}
 }
 document.querySelectorAll('.nav-link').forEach(x=>x.addEventListener('click',()=>go(x.dataset.tab)));
 document.querySelectorAll('[data-go]').forEach(x=>x.addEventListener('click',()=>go(x.dataset.go)));
@@ -90,7 +134,7 @@ async function loadAssessment(){
  const chosen=value('assessmentPath');if(!chosen)return notice('Enter an assessment directory.',true);
  state.assessment=chosen;localStorage.setItem('wcaSelectedAssessment',chosen);
  try{await request('/api/select',{method:'POST',body:{assessment:chosen}});}catch(e){notice('Cannot register assessment: '+e.message,true);}
- state.review=null;state.reviewCache.clear();await refresh();await loadRecent();
+ state.review=null;state.manual=null;state.manualOverview=null;state.selectedManual=null;state.selectedReview=null;state.reviewCache.clear();await refresh();await loadRecent();
 }
 async function refresh(){
  if(!state.assessment)return;
@@ -103,13 +147,19 @@ async function refresh(){
   set('metricMode',`${d.target_type||'—'} · ${d.mode||'—'}`);
   const rows=Object.entries(d.stages||{});set('checkpointCount',`${rows.length} stages`);
   replace($('checkpointTable'),makeTable(['Checkpoint','Status'],rows));
-  $('guidedRuntimeBtn').disabled=!(d.status==='COMPLETED'&&d.mode==='full'&&d.framework_version===bootstrap.version&&d.integrity?.status==='PASS');
+  $('guidedRuntimeBtn').disabled=state.jobStarting||(state.jobId&&state.jobKind==='runtime'&&!state.jobFinished)||!(d.status==='COMPLETED'&&d.mode==='full'&&d.framework_version===bootstrap.version&&d.integrity?.status==='PASS');
   $('appendixBtn').disabled=!(d.available_actions||[]).includes('export_appendix_with_confirmation');
   if(!$('appendixOutput').value||!$('appendixOutput').value.startsWith(state.assessment))$('appendixOutput').value=state.assessment.replace(/[\\/]+$/,'')+'-ClientAppendix.zip';
+  if(!$('workspaceAppendixOutput').value||!$('workspaceAppendixOutput').value.startsWith(state.assessment))$('workspaceAppendixOutput').value=$('appendixOutput').value;
+  const manual=result.data.manual||{};state.manualOverview=manual;
+  set('workflowCompletion',manual.available&&manual.testing_queue?`${manual.testing_queue.resolved}/${manual.testing_queue.total} addressed`:'Not available');
+  const nextAction = d.integrity?.status!=='PASS' ? 'Verify assessment integrity and resolve collection issues first.' : reviewNext(manual,result.data.review,d);
+  set('workflowNextAction',nextAction);
   const review=result.data.review;
   set('metricReview',`${review.total-review.pending}/${review.total}`);
   set('metricReviewHint',`${review.pending} pending`);
   renderRuntimeHistory(state.runtime);
+  renderWorkspaceSummary();
  }catch(e){$('overviewData').hidden=true;$('emptyState').hidden=false;notice(e,true);}
 }
 async function loadRecent(){
@@ -183,7 +233,7 @@ async function loadReview(){
  try{
   const result=await backend('review');state.review=result.data;state.reviewLoadedAt=Date.now();state.reviewCache.clear();
   set('reviewCount',`${result.data.total} conditions · ${result.data.pending} pending`);
-  renderReviewList();
+  renderReviewList();renderTestingQueue();renderWorkspaceSummary();
   const selected=(result.data.items||[]).find(i=>i.id===state.selectedReview?.id);
   if(selected){await editReview(selected,false)}else{$('reviewEditor').hidden=true;$('reviewEmpty').hidden=false;state.selectedReview=null;}
  }catch(e){replace($('reviewTable'),el('div','Review unavailable: '+e.message,'empty-small'));$('reviewEditor').hidden=true;$('reviewEmpty').hidden=false;state.selectedReview=null;}
@@ -204,9 +254,9 @@ function renderReviewList(){
 }
 $('reviewSearch').addEventListener('input',renderReviewList);
 $('reviewFilter').addEventListener('change',renderReviewList);
-function guideSection(index,label,body,open=false){
+function guideSection(index,label,body,open=false,guideId=state.selectedReview?.id||''){
  const details=el('details',undefined,'review-guide-section');
- const key=state.assessment+'|'+(state.selectedReview?.id||'')+'|'+index;
+ const key=state.assessment+'|'+guideId+'|'+index;
  details.open=state.guideOpen.has(key)?state.guideOpen.get(key):open;
  details.addEventListener('toggle',()=>{if(details.isConnected)state.guideOpen.set(key,details.open);});
  details.appendChild(el('summary',`${index} / 10  ${label}`));
@@ -217,30 +267,37 @@ function guideSection(index,label,body,open=false){
 }
 function guideCommands(commands){
  const box=el('div');if(!commands?.length){box.appendChild(el('div','No candidate-specific commands. Check the relevant assessment test cases.','review-guide-muted'));return box;}
- commands.forEach(cmd=>{const line=el('div',undefined,'review-command');line.appendChild(el('pre',cmd));const button=el('button','Copy','button subtle');button.type='button';button.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(cmd);notice('Command copied. Execution remains tester-controlled.');}catch(_){notice('Copy unavailable; select the text manually.',true);}});line.appendChild(button);box.appendChild(line);});return box;
+ commands.forEach(cmd=>{const line=el('div',undefined,'review-command');line.appendChild(el('pre',cmd));const button=el('button','Copy','button subtle');button.type='button';button.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(cmd);button.textContent='Copied';}catch(_){notice('Copy unavailable; select the text manually.',true);}});line.appendChild(button);box.appendChild(line);});return box;
 }
 function guidePoc(poc){const box=el('div');
  box.appendChild(el('p',poc?.resource||'No bundled PoC resource is applicable to this condition.'));
  for(const key of ['architecture','requires_compilation','expected_output']){if(poc?.[key])box.appendChild(el('p',`${key.replaceAll('_',' ')}: ${poc[key]}`));}
  for(const key of ['build_or_invocation','verification']){if(poc?.[key]?.length){box.appendChild(el('strong',key.replaceAll('_',' ')));poc[key].forEach((step,i)=>box.appendChild(el('p',`${i+1}. ${step}`)));}}
  box.appendChild(el('p','All PoC builds and execution are initiated by the tester, never the web interface.','review-guide-muted'));return box;}
+async function previewQueueReport(name){
+ const pane=$('queueReportPane');pane.hidden=false;
+ set('queueReportName',name);set('queueReportContent','Loading verified report…');
+ try{const result=await request('/api/report?'+params({assessment:state.assessment,name}));set('queueReportContent',result.content);}
+ catch(e){set('queueReportContent','Report unavailable: '+e.message);}
+}
+$('queueReportClose').addEventListener('click',()=>{$('queueReportPane').hidden=true;set('queueReportContent','');});
 function guideReports(artifacts){const box=el('div');if(!artifacts?.length)return el('p','No supporting reports linked.');
- artifacts.forEach(name=>{const button=el('button',name,'button outline review-guide-link');button.type='button';button.addEventListener('click',async()=>{go('reports');await loadReports();await loadReport(name);});box.appendChild(button);});return box;}
+ artifacts.forEach(name=>{const button=el('button',name,'button outline review-guide-link');button.type='button';button.addEventListener('click',()=>previewQueueReport(name));box.appendChild(button);});return box;}
 function renderGuide(detail){
  const holder=el('div');holder.appendChild(el('h3','Validation and evidence guide'));
  holder.appendChild(guideSection(1,'Observed evidence',`${detail.evidence||'See supporting reports.'}
 
-Affected component: ${detail.component||'Not specified'}\nMatching events: ${detail.matching_events||0}`,true));
- holder.appendChild(guideSection(2,'Why validate it',detail.description));
- holder.appendChild(guideSection(3,'Prerequisites',detail.prerequisites));
- holder.appendChild(guideSection(4,'Starting checks',guideCommands(detail.commands),true));
- holder.appendChild(guideSection(5,'Manual validation procedure',detail.manual_validation));
- holder.appendChild(guideSection(6,'PoC resources and build guidance',guidePoc(detail.poc)));
- holder.appendChild(guideSection(7,'Tester execution',detail.tester_execution));
- holder.appendChild(guideSection(8,'Expected evidence',detail.expected_evidence));
+Affected component: ${detail.component||'Not specified'}\nMatching events: ${detail.matching_events||0}`,true,detail.id));
+ holder.appendChild(guideSection(2,'Why validate it',detail.description,false,detail.id));
+ holder.appendChild(guideSection(3,'Prerequisites',detail.prerequisites,false,detail.id));
+ holder.appendChild(guideSection(4,'Starting checks',guideCommands(detail.commands),true,detail.id));
+ holder.appendChild(guideSection(5,'Manual validation procedure',detail.manual_validation,false,detail.id));
+ holder.appendChild(guideSection(6,'PoC resources and build guidance',guidePoc(detail.poc),false,detail.id));
+ holder.appendChild(guideSection(7,'Tester execution',detail.tester_execution,false,detail.id));
+ holder.appendChild(guideSection(8,'Expected evidence',detail.expected_evidence,false,detail.id));
  const interpret=el('div');interpret.appendChild(el('strong','Expected secure behavior'));interpret.appendChild(el('p',detail.secure||''));interpret.appendChild(el('strong','Potential security impact'));interpret.appendChild(el('p',detail.impact||''));
- holder.appendChild(guideSection(9,'Interpretation',interpret));
- holder.appendChild(guideSection(10,'When not to report',detail.not_report));
+ holder.appendChild(guideSection(9,'Interpretation',interpret,false,detail.id));
+ holder.appendChild(guideSection(10,'When not to report',detail.not_report,false,detail.id));
  const refs=el('div');refs.appendChild(el('h3','Supporting reports'));refs.appendChild(guideReports(detail.artifacts));holder.appendChild(refs);
  return holder;
 }
@@ -257,7 +314,7 @@ async function editReview(item,scroll=true){
   state.reviewDetail=d;$('reviewEmpty').hidden=true;$('reviewEditor').hidden=false;
   set('reviewTitle',d.title);set('reviewDetails',`${d.module} · ${d.severity} · ${d.id} · Evidence ${d.changed_evidence?'changed — recheck required':'unchanged'} · ${d.artifacts.join(', ')}`);
   replace($('reviewValidation'),renderGuide(d));$('reviewDecision').value=d.status;
-  $('reviewNotes').value=d.notes||'';
+  $('reviewNotes').value=d.notes||'';$('reviewClientNotes').value=d.client_notes||'';
   set('reviewSaveHint','Existing notes loaded. Click Save to explicitly record a changed decision or notes.');
   if(scroll&&window.innerWidth<1000)$('reviewEditor').scrollIntoView({behavior:'smooth',block:'start'});
  }catch(e){if(state.selectedReview?.id===requested){$('reviewEditor').hidden=true;$('reviewEmpty').hidden=false;notice('Validation guidance unavailable: '+e.message,true);}}
@@ -274,14 +331,15 @@ for(const [buttonId,expanded] of [['reviewExpandAll',true],['reviewCollapseAll',
 $('reviewRefresh').addEventListener('click',loadReview);
 $('saveReview').addEventListener('click',async()=>{
  const d=state.reviewDetail;if(!d||!state.selectedReview||d.id!==state.selectedReview.id)return;
- const decision=value('reviewDecision'), notes=$('reviewNotes').value;
- if(decision===d.status&&notes===d.notes){notice('No changes to save.');return;}
+ const decision=value('reviewDecision'), notes=$('reviewNotes').value, clientNotes=$('reviewClientNotes').value;
+ if(decision===d.status&&notes===d.notes&&clientNotes===(d.client_notes||'')){set('reviewSaveHint','No changes to save.');return;}
  if(d.changed_evidence){notice('Evidence has changed; validate the condition again before saving.',true);return;}
  // The Save button is the explicit tester confirmation. Do not add a second browser popup.
  const save=$('saveReview');save.disabled=true;save.textContent='Saving…';
  try{
-  const result=await request('/api/mutate',{method:'POST',body:{action:'save_review',assessment:state.assessment,candidate_id:d.id,fingerprint:d.fingerprint,disposition:decision,notes,confirmed:true}});
-  notice(result.message);state.reviewCache.clear();state.review=null;await loadReview();await refresh();
+  const result=await request('/api/mutate',{method:'POST',body:{action:'save_review',assessment:state.assessment,candidate_id:d.id,fingerprint:d.fingerprint,disposition:decision,notes,client_notes:clientNotes,confirmed:true}});
+  state.reviewCache.clear();state.review=null;await loadReview();await loadManualTests();await refresh();
+  set('reviewSaveHint',result.message||'Decision saved.');
  }catch(e){e.operation=e.operation||'Guided Review save';e.nextStep=e.nextStep||'Verify assessment integrity before retrying.';notice(e,true);}
  finally{save.disabled=false;save.textContent='Save decision';}
 });
@@ -289,9 +347,47 @@ async function loadReports(){if(!state.assessment)return;try{const result=await 
 async function loadReport(name,button){try{const result=await request('/api/report?'+params({assessment:state.assessment,name}));set('reportTitle',result.name);set('reportBody',result.content);document.querySelectorAll('#reportFiles button').forEach(x=>x.classList.toggle('selected',x===button));}catch(e){notice(e,true);}}
 $('reportsRefresh').addEventListener('click',loadReports);
 async function mutate(action,body){return request('/api/mutate',{method:'POST',body:{action,assessment:state.assessment,confirmed:true,...body}});}
-$('appendixBtn').addEventListener('click',async()=>{if(!confirm('Export a sanitized, reviewed Client Appendix ZIP to the specified location?'))return;try{const result=await mutate('export_appendix',{output:value('appendixOutput')});notice(`Verified appendix exported: ${result.data.filename}`);}catch(e){notice(e,true);}});
-$('regenerateBtn').addEventListener('click',async()=>{if(!confirm('Regenerate ONLY eligible derived reports from intact authoritative evidence?'))return;try{const result=await mutate('regenerate_reports',{});notice(result.message);await refresh();}catch(e){notice(e,true);}});
+async function generateAppendix(outputId,hintId,buttonId){
+ if(!state.assessment)return notice('Open a completed assessment first.',true);
+ const output=value(outputId);
+ if(!output){set(hintId,'Select a destination ZIP outside the assessment directory.');$(outputId).focus();return;}
+ const button=$(buttonId);button.disabled=true;
+ try{
+  // Recheck the live assessment, not stale page state. Backend performs its own
+  // complete integrity and readiness checks again on the mutation request.
+  const result=await request('/api/overview?'+params({assessment:state.assessment}));
+  const current=result.data.status||{};const manual=result.data.manual||{};
+  state.status=current;state.manualOverview=manual;
+  if(current.integrity?.status!=='PASS')throw new Error('Assessment integrity verification is not PASS. Open Assessment Management to inspect the issue before exporting.');
+  if(!(current.available_actions||[]).includes('export_appendix_with_confirmation'))throw new Error('Client Appendix export is not eligible. Complete the required review and assessment checkpoints.');
+  const remaining=manual.available?(manual.testing_queue?.remaining??manual.remaining??0):null;
+  const warning=remaining===null?'Manual test completion is unavailable; verify testing status before delivery.':remaining>0?
+    `${remaining} testing activit${remaining===1?'y':'ies'} remain unresolved, including ${manual.by_status?.BLOCKED||0} blocked manual case(s). The appendix is not proof that testing is complete.`:'';
+  const question=(warning?warning+'\n\n':'')+'Generate the sanitized, reviewed Client Appendix ZIP at the specified location?';
+  if(!confirm(question)){set(hintId,'Export canceled; no evidence was modified.');return;}
+  const exported=await mutate('export_appendix',{output});
+  set(hintId,`Verified Client Appendix generated: ${exported.data.filename}`);
+  set('actionsHint',`Verified Client Appendix generated: ${exported.data.filename}`);
+ }catch(e){e.operation=e.operation||'Client Appendix export';notice(e,true);set(hintId,`Export did not complete: ${e.message}`);}
+ finally{button.disabled=false;}
+}
+async function loadClientNotesPreview(){
+ const holder=$('clientNotesPreview');
+ if(!state.assessment){holder.textContent='Open an assessment first.';return;}
+ try{
+  const r=await request('/api/client-notes?'+params({assessment:state.assessment}));
+  holder.replaceChildren();
+  if(!r.notes?.length){holder.appendChild(el('p','No client-facing notes saved. That is fine; the appendix can be generated without them.','hint'));return;}
+  r.notes.forEach(n=>{const block=el('div',undefined,'workspace-check');block.appendChild(el('strong',`${n.id} — ${n.title}`));block.appendChild(el('span',n.notes));holder.appendChild(block);});
+ }catch(e){holder.textContent='Client note preview unavailable: '+e.message;}
+}
+$('appendixBtn').addEventListener('click',()=>generateAppendix('appendixOutput','actionsHint','appendixBtn'));
+$('workspaceAppendixBtn').addEventListener('click',()=>generateAppendix('workspaceAppendixOutput','workspaceAppendixHint','workspaceAppendixBtn'));
+$('regenerateBtn').addEventListener('click',async()=>{if(!confirm('Regenerate ONLY eligible derived reports from intact authoritative evidence?'))return;try{const result=await mutate('regenerate_reports',{});set('regenerateReason',result.message||'Eligible derived reports regenerated.');await refresh();}catch(e){notice(e,true);}});
 async function startJob(kind,data){
+ if(state.jobStarting)return;
+ state.jobStarting=true;
+ if(kind==='runtime'){$('guidedRuntimeBtn').disabled=true;$('guidedRuntimeBtn').textContent='Starting Guided Runtime…';set('runtimeStatus','STARTING');}
  try{
   const result=await request('/api/start',{method:'POST',body:{kind,confirmed:true,...data}});
   state.jobId=result.job.id;state.jobAssessment=kind==='assessment'?`${data.output.replace(/[\\/]+$/,'')}\\${data.name}`:data.assessment;
@@ -301,6 +397,7 @@ async function startJob(kind,data){
   notice(result.job.message);go('dashboard');$('assessmentPath').value=state.jobAssessment;
   state.assessment=state.jobAssessment;localStorage.setItem('wcaSelectedAssessment',state.assessment);await loadRecent();await pollJob();
  }catch(e){notice(e,true);}
+ finally{state.jobStarting=false;if(kind==='runtime'){$('guidedRuntimeBtn').textContent='Start Guided Runtime Observation';if(!state.jobId||state.jobFinished){if(state.status?.status==='COMPLETED'&&state.status?.integrity?.status==='PASS')$('guidedRuntimeBtn').disabled=false;}}}
 }
 $('createBtn').addEventListener('click',()=>{
  const data={target:value('newTarget'),target_type:value('newType'),mode:value('newMode'),name:value('newName'),output:value('newOutput'),primary_executable:value('newPrimary'),
@@ -410,3 +507,323 @@ async function pollJob(){
 Array.from(document.querySelectorAll('.browse')).forEach(btn=>btn.addEventListener('click',async()=>{try{const result=await request('/api/pick',{method:'POST',body:{kind:btn.dataset.pick}});if(result.path)$(btn.dataset.target).value=result.path;}catch(e){notice('Native picker unavailable; enter the full path manually.',true);}}));
 $('globalJobStatus').addEventListener('click',()=>go('dashboard'));
 $('versionPill').textContent=bootstrap.version;$('footerVersion').textContent=bootstrap.version;$('assessmentPath').value=state.assessment;if(!token){notice('Open the private GUI session URL printed in the WCA terminal. The plain localhost address is not sufficient.',true);}else{if(state.assessment)refresh();loadRecent();const previous=localStorage.getItem('wcaActiveJob');if(previous){state.jobId=previous;state.lastLog=null;pollJob();}}setInterval(()=>{if(state.jobId&&!state.jobFinished)pollJob();},2500);
+
+
+function reviewNext(manual,review,d){
+ if(d.status!=='COMPLETED')return 'Complete collection and its tester checkpoints first.';
+ if((review?.pending||0)>0)return `Disposition ${review.pending} remaining Guided Review candidates, then continue manual testing.`;
+ if(!manual.available)return 'Open Testing Queue to review the applicable test procedures.';
+ if((manual.testing_queue?.remaining??manual.remaining)>0)return `Continue ${manual.testing_queue?.remaining??manual.remaining} outstanding testing activities in the unified Testing Queue.`;
+ return 'All tracked activities addressed. Review broader engagement scope and prepare the Client Appendix.';
+}
+// Unified Testing Queue is a read-only projection of existing, separately
+// integrity-protected candidate dispositions and manual-test state.
+let queueLoading=false;
+async function loadTestingQueue(){
+ if(!state.assessment||queueLoading)return;
+ queueLoading=true;
+ try{
+  if(!state.review?.items)await loadReview();
+  if(!state.manual?.items)await loadManualTests();
+  renderTestingQueue();
+ }finally{queueLoading=false;}
+}
+function queueActivities(){
+ // Use the same integrity-verified backend projection as Overview and the
+ // Final Checklist. A completed manual test cannot conceal a pending WCR.
+ return state.manual?.testing_queue?.items||[];
+}
+function reviewPending(activity){return activity.pending_candidates||0;}
+function manualPending(activity){return activity.type==='manual'&&!activity.manual_complete;}
+function renderTestingQueue(){
+ const items=queueActivities(), filter=value('queueFilter'), q=value('queueSearch').toLowerCase();
+ const resolved=items.filter(x=>x.addressed).length;
+ set('queueProgress',`${resolved}/${items.length} activities addressed · ${items.length-resolved} remaining · ${items.reduce((n,a)=>n+reviewPending(a),0)} pending Guided Review candidates. Manual and guided requirements must both be addressed.`);
+ const filtered=items.filter(x=>(filter==='all'||(filter==='addressed'?x.addressed:filter==='pending-review'?reviewPending(x)>0:filter==='pending-manual'?manualPending(x):!x.addressed))&&
+  (!q||`${x.id} ${x.title} ${x.status} ${(x.related_candidates||[]).map(c=>c.id+' '+c.title).join(' ')}`.toLowerCase().includes(q)));
+ const list=el('div',undefined,'review-list');
+ for(const a of filtered){const button=el('button',undefined,'review-item');button.type='button';
+  button.classList.toggle('selected',a.id===state.activeQueue?.id);
+  button.appendChild(el('div',`${a.id} — ${a.title}`,'review-item-title'));
+  button.appendChild(el('div',`${a.addressed?'ADDRESSED':'NEEDS TESTING'} · ${a.status}`+
+   ((a.related_candidates||[]).length?` · ${(a.related_candidates||[]).length} linked candidate(s)`:'')+(reviewPending(a)?` · ${reviewPending(a)} WCR PENDING`:'')+(a.changed?' · REVALIDATE EVIDENCE':''),'review-item-sub'));
+  button.addEventListener('click',()=>openQueueActivity(a));list.appendChild(button);
+ }
+ if(!filtered.length)list.appendChild(el('div','No testing activities match this view.','empty-small'));
+ replace($('queueItems'),list);
+}
+async function openQueueActivity(a){
+ state.activeQueue={id:a.id,type:a.type};
+ $('queueReportPane').hidden=true;set('queueReportContent','');
+ const slot=$('queueDetail');$('queueEmpty').hidden=true;
+ if(a.type==='manual'){
+  const item=(state.manual?.items||[]).find(x=>x.id===a.id);
+  if(!item)return;
+  slot.appendChild($('manualEditor'));$('reviewEditor').hidden=true;
+  await editManual(item);
+ }else{
+  const item=(state.review?.items||[]).find(x=>x.id===a.id);
+  if(!item)return;
+  slot.appendChild($('reviewEditor'));$('manualEditor').hidden=true;
+  await editReview(item,false);
+ }
+ renderTestingQueue();
+}
+$('queueFilter').addEventListener('change',renderTestingQueue);
+$('queueSearch').addEventListener('input',renderTestingQueue);
+$('queueRefresh').addEventListener('click',async()=>{state.review=null;state.manual=null;await loadTestingQueue();await refresh();});
+const MANUAL_CATEGORIES={AS:'Application-level',IN:'Installer',TG:'Target',SG:'Signature',MS:'MSI',PE:'PE & binaries',CF:'Configuration',LS:'Local storage',FS:'Filesystem',RG:'Registry',SV:'Services',TS:'Scheduled tasks',PB:'Privilege boundary',DR:'Drivers',PM:'Procmon',DL:'DLL loading',AR:'Advanced runtime',MC:'Memory/crypto',NW:'Network',IP:'IPC',UP:'Updater'};
+function caseCategory(id){return id.split('-')[1]||'OTHER';}
+function renderManualList(){
+ const items=state.manual?.items||[];
+ const search=value('manualSearch').toLowerCase(), status=value('manualStatusFilter'), category=value('manualCategoryFilter'), guided=value('manualGuidedFilter');
+ const filtered=items.filter(item=>(!status||item.status===status)&&(!category||caseCategory(item.id)===category)&&
+  (!guided||(guided==='linked'?(item.related_candidates||[]).length>0:(item.related_candidates||[]).length===0))&&
+  (!search||`${item.id} ${item.title} ${(item.reports||[]).join(' ')}`.toLowerCase().includes(search)));
+ set('manualFilterCount',`Showing ${filtered.length} of ${items.length} applicable test cases`);
+ const list=el('div',undefined,'review-list');
+ filtered.forEach(item=>{
+  const b=el('button',undefined,'review-item');b.type='button';
+  b.classList.toggle('selected',item.id===state.selectedManual?.id);
+  b.appendChild(el('div',`${item.id} — ${item.title}`,'review-item-title'));
+  b.appendChild(el('div',item.status+(item.changed_evidence?' · CHANGED EVIDENCE':'')+
+   ((item.related_candidates||[]).length?` · ${(item.related_candidates||[]).length} related review candidate(s)`:''),'review-item-sub'));
+  b.addEventListener('click',()=>editManual(item));list.appendChild(b);
+ });
+ if(!filtered.length)list.appendChild(el('div','No test cases match these filters.','empty-small'));
+ replace($('manualCaseList'),list);
+}
+async function loadManualTests(){
+ if(!state.assessment){set('workflowHint','Open a verified assessment first.');return;}
+ try{
+  const response=await request('/api/manual-tests?'+params({assessment:state.assessment}));
+  state.manual=response.data;
+  set('workflowCount',`${state.manual.testing_queue?.resolved??0}/${state.manual.testing_queue?.total??0} activities addressed · ${state.manual.testing_queue?.remaining??0} remaining`);
+  set('workflowHint',`${state.manual.changed_evidence||0} case(s) changed since earlier review. Only current-version assessments can be modified; older assessments remain read-only.`);
+  const filter=$('manualCategoryFilter'),current=filter.value;
+  filter.replaceChildren();const all=el('option','All categories');all.value='';filter.appendChild(all);
+  const cats=[...new Set(state.manual.items.map(item=>caseCategory(item.id)))].sort();
+  cats.forEach(cat=>{const option=el('option',`${cat} — ${MANUAL_CATEGORIES[cat]||'Other'}`);option.value=cat;filter.appendChild(option);});
+  filter.value=cats.includes(current)?current:'';
+  renderManualList();renderTestingQueue();renderWorkspaceSummary();
+  const selected=(state.manual.items||[]).find(x=>x.id===state.selectedManual?.id);
+  if(selected)await editManual(selected);else{$('manualEditor').hidden=true;$('manualEmpty').hidden=false;}
+ }catch(e){set('workflowHint','Manual workflow unavailable: '+e.message);$('manualEditor').hidden=true;}
+}
+async function previewManualReport(name){
+ if(!state.assessment||!state.selectedManual?.reports?.includes(name))return;
+ $('manualReportPane').hidden=false;
+ set('manualReportName',name);set('manualReportContent','Opening verified report…');
+ try{
+  const result=await request('/api/report?'+params({assessment:state.assessment,name}));
+  if(state.selectedManual?.reports?.includes(result.name))set('manualReportContent',result.content);
+ }catch(e){set('manualReportContent','Unable to open report: '+e.message);}
+}
+$('manualReportClose').addEventListener('click',()=>{$('manualReportPane').hidden=true;set('manualReportContent','');});
+// An independent WCR editor for each related candidate. Unlike the legacy
+// shared reviewEditor this does not move DOM nodes, hide sibling candidates, or
+// discard unsaved manual-test input when a candidate disposition is saved.
+async function loadInlineCandidate(candidate,card,container){
+ const result=await request('/api/review-detail?'+params({assessment:state.assessment,id:candidate.id}));
+ const d=result.detail;
+ if(!card.isConnected||state.selectedManual?.related_candidates?.every(x=>x.id!==d.id))return;
+ const form=el('div',undefined,'linked-wcr-content');
+ form.appendChild(el('p',`${d.module} · ${d.severity} · ${d.id} · Evidence ${d.changed_evidence?'changed — revalidation required':'unchanged'}`,'hint'));
+ form.appendChild(renderGuide(d));
+ const decision=el('div',undefined,'linked-wcr-decision');
+ decision.appendChild(el('h4','Candidate review decision'));
+ decision.appendChild(el('p','Record the WCR disposition independently from manual test completion. VALIDATED does not prove exploitability.','hint'));
+ const statusLabel=el('label','Disposition');const status=el('select');
+ for(const value of ['PENDING','VALIDATED','NOT APPLICABLE','INFORMATIONAL']){const o=el('option',value);o.value=value;status.appendChild(o);}
+ status.value=d.status;statusLabel.appendChild(status);decision.appendChild(statusLabel);
+ const notesLabel=el('label','Internal Tester Notes (optional — excluded from client deliverables)');
+ const notes=el('textarea');notes.rows=3;notes.maxLength=4000;notes.value=d.notes||'';notesLabel.appendChild(notes);decision.appendChild(notesLabel);
+ const clientLabel=el('label','Client-Facing Notes (optional)');
+ const clientNotes=el('textarea');clientNotes.rows=3;clientNotes.maxLength=4000;clientNotes.value=d.client_notes||'';clientLabel.appendChild(clientNotes);decision.appendChild(clientLabel);
+ decision.appendChild(el('p','Client deliverable: client-facing notes WILL appear in the Client Appendix; internal notes are excluded.','hint'));
+ const save=el('button','Save WCR decision','button primary');save.type='button';
+ const hint=el('span','Changes are saved only after clicking Save.','hint');
+ const actions=el('div',undefined,'linked-wcr-save');actions.appendChild(save);actions.appendChild(hint);decision.appendChild(actions);
+ save.disabled=state.status?.framework_version!==bootstrap.version;
+ const updateUnsaved=()=>{card.dataset.unsaved=String(status.value!==d.status||notes.value!==(d.notes||'')||clientNotes.value!==(d.client_notes||''));};
+ status.addEventListener('change',updateUnsaved);
+ notes.addEventListener('input',updateUnsaved);clientNotes.addEventListener('input',updateUnsaved);
+ updateUnsaved();
+ save.addEventListener('click',async()=>{
+  if(status.value===d.status&&notes.value===(d.notes||'')&&clientNotes.value===(d.client_notes||'')){
+   hint.textContent='No changes to save.';return;
+  }
+  if(d.changed_evidence){hint.textContent='Evidence changed; refresh and revalidate this candidate before saving.';return;}
+  save.disabled=true;save.textContent='Saving…';
+  try{
+   const resp=await request('/api/mutate',{method:'POST',body:{action:'save_review',assessment:state.assessment,
+    candidate_id:d.id,fingerprint:d.fingerprint,disposition:status.value,notes:notes.value,
+    client_notes:clientNotes.value,confirmed:true}});
+   d.status=status.value;d.notes=notes.value;d.client_notes=clientNotes.value;updateUnsaved();
+   const chip=card.querySelector('.linked-wcr-status');if(chip)chip.textContent=d.status;
+   card.open=true;
+   // Refresh the verified queue projection without rebuilding open WCR cards.
+   // Otherwise unsaved notes in sibling WCRs or the manual test would be lost.
+   state.review=(await backend('review')).data;
+   state.reviewLoadedAt=Date.now();state.reviewCache.clear();
+   state.manual=(await request('/api/manual-tests?'+params({assessment:state.assessment}))).data;
+   const latest=(state.manual.items||[]).find(x=>x.id===state.selectedManual?.id);
+   if(latest){
+    state.selectedManual={...state.selectedManual,related_candidates:latest.related_candidates};
+    const eligible=latest.related_candidates?.length&&latest.related_candidates.every(c=>
+     ['VALIDATED','INFORMATIONAL','NOT APPLICABLE'].includes(c.status)&&!c.changed_evidence);
+    const option=[...$('manualStatus').options].find(o=>o.value==='ADDRESSED IN GUIDED REVIEW');
+    if(option){option.hidden=!eligible;option.disabled=!eligible;}
+    const count=latest.related_candidates.filter(x=>x.status==='PENDING'||x.changed_evidence).length;
+    set('manualChanged',count?`${count} linked candidate(s) still pending. Manual completion alone does not close this activity.`:
+      'All linked WCR candidates dispositioned. Complete any remaining manual testing.');
+    const header=$('manualRelated').querySelector('.linked-wcr-header .hint');
+    if(header)header.textContent=`${count} pending · All related candidates are shown below. Each saves independently.`;
+   }
+   renderTestingQueue();renderWorkspaceSummary();await refresh();
+   hint.textContent=resp.message||'WCR decision saved.';
+  }catch(e){hint.textContent='WCR save failed: '+e.message;notice(e,true);}
+  finally{save.disabled=state.status?.framework_version!==bootstrap.version;save.textContent='Save WCR decision';}
+ });
+ form.appendChild(decision);replace(container,form);
+}
+
+async function editManual(item){
+ try{
+  const result=await request('/api/manual-test?'+params({assessment:state.assessment,case_id:item.id}));
+  if(result.data.fingerprint!==item.fingerprint)throw new Error('Test case changed; refresh the list.');
+  item=result.data;
+ }catch(e){notice('Manual test details unavailable: '+e.message,true);return;}
+ state.selectedManual=item;
+ $('manualEditor').hidden=false;$('manualEmpty').hidden=true;
+ $('manualReportPane').hidden=true;
+ set('manualReportContent','');
+ set('manualId',item.id);set('manualTitle',item.title);set('manualCompletionId',item.id);set('manualSaveHint','');
+ const guidedEligible=!!item.related_candidates?.length&&item.related_candidates.every(c=>
+  ['VALIDATED','INFORMATIONAL','NOT APPLICABLE'].includes(c.status)&&!c.changed_evidence);
+ const guidedOption=[...$('manualStatus').options].find(o=>o.value==='ADDRESSED IN GUIDED REVIEW');
+ if(guidedOption){guidedOption.hidden=!guidedEligible;guidedOption.disabled=!guidedEligible;}
+ $('manualStatus').value=item.status;
+ $('manualEvidence').value=item.evidence_reference||'';
+ $('manualNotes').value=item.notes||'';$('manualClientNotes').value=item.client_notes||'';
+ const pending=item.related_candidates?.filter(c=>!['VALIDATED','INFORMATIONAL','NOT APPLICABLE'].includes(c.status)||c.changed_evidence)||[];
+ set('manualChanged',item.changed_evidence?'The test-case procedure changed. Revalidate before recording a new status.':
+  pending.length?`${pending.length} linked Guided Review candidate(s) still pending. Completing manual testing will not close this activity until they are dispositioned.`:
+  item.related_candidates?.length?'All linked candidates dispositioned. Confirm all test steps before using Addressed in Guided Review.':
+  'No linked candidates. Record your manual testing outcome.');
+ $('manualSave').disabled=state.status?.framework_version!==bootstrap.version;
+ const related=$('manualRelated');related.replaceChildren();
+ const inline=$('manualLinkedReview');inline.replaceChildren();inline.hidden=!item.related_candidates?.length;
+ if(item.related_candidates?.length){
+  const title=el('div',undefined,'linked-wcr-header');
+  title.appendChild(el('h3',`Guided Review candidates (${item.related_candidates.length})`));
+  title.appendChild(el('p',`${pending.length} pending · All related candidates are shown below. Each saves independently.`, 'hint'));
+  related.appendChild(title);
+  // Every candidate receives an independent editor. Reviewed candidates start
+  // collapsed; pending candidates show their full validation controls immediately.
+  for(const candidate of item.related_candidates){
+   const card=el('details',undefined,'linked-wcr-card');
+   card.open=candidate.status==='PENDING'||!!candidate.changed_evidence;
+   const summary=el('summary',undefined,'linked-wcr-summary');
+   summary.appendChild(el('span',candidate.id,'linked-wcr-id'));
+   summary.appendChild(el('strong',candidate.title,'linked-wcr-title'));
+   summary.appendChild(el('span',candidate.changed_evidence?'CHANGED EVIDENCE':candidate.status,'linked-wcr-status'));
+   card.appendChild(summary);
+   const detailArea=el('div','Loading candidate guidance…','linked-wcr-detail');card.appendChild(detailArea);
+   inline.appendChild(card);
+   // Independent requests allow every related WCR to be shown, not just the
+   // first; the manual editor and its unsaved notes are never reparented.
+   loadInlineCandidate(candidate,card,detailArea).catch(e=>{replace(detailArea,el('p','Candidate guidance unavailable: '+e.message,'hint'));});
+  }
+ }else{
+  related.appendChild(el('p','No related Guided Review candidate; record the test result directly.','hint'));
+ }
+ const guidance=$('manualGuidance');guidance.replaceChildren();
+ for(const [label,body] of Object.entries(item.guidance||{})){
+  const section=el('details',undefined,'review-guide-section');
+  section.open=label==='Procedure'||label==='How to Perform';
+  section.appendChild(el('summary',label));section.appendChild(el('pre',body,'manual-guidance-body'));
+  guidance.appendChild(section);
+ }
+ const links=$('manualReportLinks');links.replaceChildren();
+ if(!item.reports?.length)links.appendChild(el('p','No supporting report available for inline viewing. Use the procedure in this activity.','hint'));
+ else item.reports.forEach(name=>{
+  const link=el('button','View '+name+' →','button outline review-guide-link');link.type='button';
+  link.addEventListener('click',()=>previewManualReport(name));links.appendChild(link);
+ });
+ renderManualList();
+}
+['manualSearch','manualStatusFilter','manualCategoryFilter','manualGuidedFilter'].forEach(id=>$(id).addEventListener(id==='manualSearch'?'input':'change',renderManualList));
+$('workflowRefresh').addEventListener('click',loadManualTests);
+$('manualSave').addEventListener('click',async()=>{
+ if(!state.assessment||!state.selectedManual)return;
+ if($('manualLinkedReview').querySelector('.linked-wcr-card[data-unsaved="true"]')){
+  set('manualSaveHint','An associated WCR has unsaved changes. Save its decision first so those notes are not lost.');return;
+ }
+ $('manualSave').disabled=true;
+ try{
+  const r=await request('/api/manual-tests',{method:'POST',body:{confirmed:true,assessment:state.assessment,
+   case_id:state.selectedManual.id,fingerprint:state.selectedManual.fingerprint,
+   status:$('manualStatus').value,evidence_reference:$('manualEvidence').value,notes:$('manualNotes').value,client_notes:$('manualClientNotes').value}});
+  const savedScroll=window.scrollY;await loadManualTests();await refresh();window.scrollTo(0,savedScroll);
+  const fresh=(state.manual?.items||[]).find(x=>x.id===state.selectedManual?.id);
+  const outstanding=(fresh?.related_candidates||[]).filter(c=>!['VALIDATED','INFORMATIONAL','NOT APPLICABLE'].includes(c.status)||c.changed_evidence).length;
+  set('manualSaveHint',outstanding?`Manual decision saved. ${outstanding} linked Guided Review candidate(s) still require review.`:(r.message||'Manual test status saved.'));
+ }catch(e){notice(e,true);}finally{$('manualSave').disabled=state.status?.framework_version!==bootstrap.version;}
+});
+
+async function previewWorkspaceEvidence(name){
+ if(!state.assessment)return notice('Open an assessment first.',true);
+ showWorkspacePane('evidence');$('workspaceEvidencePane').hidden=false;
+ set('workspaceEvidenceTitle',name);set('workspaceEvidenceContent','Opening verified report…');
+ try{const r=await request('/api/report?'+params({assessment:state.assessment,name}));set('workspaceEvidenceContent',r.content);}
+ catch(e){set('workspaceEvidenceContent','Report unavailable: '+e.message);}
+}
+// Evidence & Guidance is a reference view, never another testing checklist.
+// The authoritative trackable procedures and WCR dispositions live in the queue.
+const supplementalGuidance=[
+ {title:'HTTP / API and authentication',tools:'Burp Suite · Wireshark',
+  scope:'The client uses HTTP(S), WebSocket, a localhost service, or authenticated APIs',
+  steps:['Identify one in-scope transaction and its authenticating principal.',
+   'Replay it with authorized alternate account or object identifiers; check server-side authorization and session handling.',
+   'Document only behavior not already covered by network or IPC queue activities.'],
+  expected:'The authoritative service rejects unauthorized requests independently of the Windows client.',
+  related:['TC-AS-001','TC-NW-002']},
+ {title:'Deep code and runtime inspection',tools:'Ghidra · ILSpy · Frida · WinDbg',
+  scope:'Evidence identifies a security-sensitive code path that needs deeper inspection',
+  steps:['Use static review to locate input parsers, command execution, IPC handling, credential or crypto paths.',
+   'Where authorized, observe the specific process/function with a suitable debugger or instrumentation tool.',
+   'Validate a real trust-boundary failure rather than reporting API usage or ordinary application behavior.'],
+  expected:'Untrusted input cannot trigger unauthorized sensitive operations; memory and authorization boundaries are enforced.',
+  related:['TC-AS-001','TC-AR-004']},
+ {title:'Application-specific trust boundaries',tools:'Procmon · Process Explorer · protocol-specific tooling',
+  scope:'A feature exposes an in-scope trust boundary absent from the other applicable test cases',
+  steps:['Identify the lower-trust actor, controllable input, trusted consumer and exact operation.',
+   'Use a bounded, non-destructive test action in the authorized VM; correlate with target-scoped evidence.',
+   'Record the outcome in the engagement test record rather than reopening completed queue items.'],
+  expected:'Sensitive functionality consistently enforces caller identity, permissions and input constraints.',
+  related:['TC-AS-001']}
+];
+const supplement=$('workspaceSupplemental');
+for(const group of supplementalGuidance){
+ const card=el('section',undefined,'supplemental-card');card.appendChild(el('h3',group.title));
+ card.appendChild(el('p','When applicable: '+group.scope));
+ card.appendChild(el('p','Tools: '+group.tools,'hint'));
+ const detail=el('details');detail.appendChild(el('summary','How to investigate (optional reference)'));
+ const steps=el('ol');for(const step of group.steps)steps.appendChild(el('li',step));detail.appendChild(steps);
+ detail.appendChild(el('strong','Expected secure behavior'));detail.appendChild(el('p',group.expected));card.appendChild(detail);
+ const btn=el('button','Open related Testing Queue activity →','button outline');btn.type='button';
+ btn.addEventListener('click',async()=>{
+  showWorkspacePane('queue');await loadTestingQueue();
+  const target=queueActivities().find(a=>group.related.includes(a.id));
+  if(target)await openQueueActivity(target);
+  else set('queueProgress','No matching applicable activity in the current assessment. Use engagement-specific testing notes in your formal pentest report.');
+ });
+ card.appendChild(btn);supplement.appendChild(card);
+}
+const workspaceReports=[['coverage_summary.txt','Collection coverage'],['module_status.txt','Module execution status'],
+ ['collection_provenance.txt','Collection provenance'],['findings_summary.txt','Findings summary']];
+for(const [name,label] of workspaceReports){const b=el('button',label+' →','button outline');b.type='button';
+ b.addEventListener('click',()=>previewWorkspaceEvidence(name));$('workspaceEvidenceLinks').appendChild(b);}
+$('workspaceFullMethodology').addEventListener('click',()=>previewWorkspaceEvidence('attack_surface_test_plan.txt'));
+$('workflowCoverage').addEventListener('click',()=>previewWorkspaceEvidence('coverage_summary.txt'));

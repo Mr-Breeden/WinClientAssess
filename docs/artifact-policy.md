@@ -1,6 +1,6 @@
 # WCA artifact policy
 
-**Current artifact catalog:** 2.0 (framework v2.1.0; historical 1.8 changes documented below)
+**Current artifact catalog:** 2.0 (framework v2.2.0; historical 1.8 changes documented below)
 
 WCA keeps an artifact only when it has a distinct tester, evidence, correlation, integrity, recovery or reproducibility purpose.
 
@@ -40,3 +40,7 @@ The GitHub source ZIP contains current source, canonical documentation, current 
 ### v2.1.0 collection provenance exception
 
 `reports/collection_provenance.txt` is the single authoritative human-readable provenance report. `working/collection_provenance_state.json` is **not** a duplicate report: it preserves append-only stable execution identifiers through later Guided Runtime sessions and derived-report regeneration. It is operational working state, integrity verified, and never included in the client export. Raw binary, CSV and JSON evidence must not have embedded provenance headers.
+
+## M2-p3 audit / consolidation boundary
+
+A report-by-report audit against the M2-p2 DarkRelay Full Assessment inventories 70 distinct report files and maps consolidation options. No report is removed or combined until producer/consumer mappings, tester procedure links, integrity manifests, provenance references and legacy assessment compatibility are migrated and regression-tested. Keep the separate client allowlist and only one working JSON/CSV per distinct correlation or recovery need. This is a deliberate compatibility safeguard, not a requirement to generate more reports.

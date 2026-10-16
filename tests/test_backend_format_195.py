@@ -29,7 +29,7 @@ def test_backend_defaults_to_unchanged_json_contract():
     assert proc.returncode == 0, proc.stderr
     data = json.loads(proc.stdout)
     assert data['schema'] == '1.0' and data['ok'] is True
-    assert data['data']['version'] == '2.1.0'
+    assert data['data']['version'] == '2.2.0'
     assert proc.stdout.strip().startswith('{')
 
 
@@ -43,7 +43,7 @@ def test_backend_explicit_json_same_as_default():
 def test_readable_backend_capabilities_show_no_gui():
     proc = run_cli('--backend-action', 'capabilities', '--backend-format', 'text')
     assert proc.returncode == 0, proc.stderr
-    assert 'WCA 2.1.0' in proc.stdout
+    assert 'WCA 2.2.0' in proc.stdout
     assert 'installable, portable' in proc.stdout
     assert 'GUI' in proc.stdout and 'Available' in proc.stdout
     assert 'JSON' not in proc.stdout
@@ -119,6 +119,8 @@ def test_local_tool_paths_configuration_is_allowed_but_never_released(monkeypatc
         (tmp_path / name).write_text('fixture', encoding='utf-8')
     for dirname in packager.TOP_LEVEL_DIRS:
         (tmp_path / dirname).mkdir()
+    for name in packager.BRAND_ASSETS:
+        (tmp_path / 'assets' / name).write_bytes(bytes.fromhex('89504e470d0a1a0a'))
     for name in packager.CANONICAL_DOCS:
         (tmp_path / 'docs' / name).write_text('fixture', encoding='utf-8')
     (tmp_path / 'scripts' / 'poc').mkdir()
@@ -138,7 +140,7 @@ def test_windows_validation_checks_backend_text_and_exit_code():
     script = Path('scripts/validate_windows.ps1').read_text(encoding='utf-8')
     assert '$LASTEXITCODE' in script
     assert "'--backend-format','text'" in script
-    assert "WCA 2.1.0 version string not detected" in script
+    assert "WCA 2.2.0 version string not detected" in script
 
 
 def test_subprocess_text_ignores_inherited_legacy_codepage(monkeypatch):
@@ -148,5 +150,5 @@ def test_subprocess_text_ignores_inherited_legacy_codepage(monkeypatch):
     assert proc.returncode == 0, proc.stderr
     assert isinstance(proc.stdout, str)
     assert 'WCA backend — Capabilities' in proc.stdout
-    assert 'WCA 2.1.0' in proc.stdout
+    assert 'WCA 2.2.0' in proc.stdout
     assert 'GUI' in proc.stdout

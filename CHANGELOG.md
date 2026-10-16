@@ -1,4 +1,81 @@
+# Changelog
+
+## v2.2.0 — General Availability (2026-10-16)
+
+- Promoted Windows-accepted RC1 to stable release without changing the assessment engine, GUI or collection modules.
+- Released consolidated Testing Queue with linked WCR cards, correct outstanding-work counts and context-aware manual completion.
+- Improved Evidence & Guidance, signed-off Client Appendix privacy/integrity behavior, and early UAC elevation.
+- Added a source-only illustrative v2.2.0 banner and production source/tester distributions.
+- Preserved existing report filenames and state formats for compatibility.
+
+## v2.2.0-RC1 (release candidate; internal engine version 2.2.0)
+
+- Freeze the Windows-tested M2-p4 Tester Workspace, Guided Runtime and Client Appendix behavior, plus the M2-p5 early Administrator/UAC preflight. No collection, evidence format, UI workflow or vulnerability-scoring changes.
+- Reconcile primary release documentation with the actual accepted M2-p4 Full Assessment / Client Appendix and M2-p5 Windows UAC smoke tests. Keep the separate RC1 package smoke, clean-VM walkthrough and final release sign-off pending.
+- Add a minimal tester distribution to the existing audited source packaging workflow, avoiding redundant test/build contents without dropping runtime or methodology helpers.
+- Preserve integrity/state schemas, report filenames, historical provenance, the sanitized export allowlist and older-assessment read-only behavior. Defer artifact mergers until explicit compatibility migration.
+- Original approved brand PNG is not embedded because its raw bytes were not available; no substitute is represented as approved artwork.
+
+## v2.2.0-M2-p5 (development patch; internal version 2.2.0)
+
+- Check GUI Administrator privileges before starting the private HTTP server; request native Windows UAC elevation through `ShellExecuteW` when launched unelevated.
+- Preserve the selected Python interpreter/virtual environment, CLI arguments (including GUI port), and working directory in the elevated child; print the private session URL only from the elevated GUI process.
+- Exit the original unelevated process without initializing assessment state; cancel/deny elevation cleanly and prevent repeated UAC prompts.
+- Require elevation before privileged Full Assessment and standalone Guided Runtime operations while preserving non-admin Static CLI, read-only backend actions, `--help`, and `--version`.
+- Prevent browser-owned workers from attempting their own UAC escalation; add focused Windows UAC simulation tests and a native Windows acceptance checklist.
+- No changes to collectors, assessment data formats, report generation, Client Appendix or the accepted v2.1.0 GitHub baseline.
+
+## v2.2.0-M2-p4 (development patch; internal version 2.2.0)
+
+- Display all linked WCR candidate reviews inside one Testing Queue activity using independently collapsible cards, with pending candidates expanded by default.
+- Add prominent Manual Test Completion section boundary; preserve independent status/notes and candidate-review integrity.
+- Replace redundant Evidence & Guidance checklist links with readable, contextual supplemental guidance and direct links to related queue activities.
+- Keep the full attack-surface plan optional; add an indexed TC cross-reference for offline methodology readability. Preserve original artifact names and existing tests.
+
+## v2.2.0-M2-p3 (development patch; internal version 2.2.0)
+
+- Fix Testing Queue completion logic: linked pending/changed WCR candidates keep an activity outstanding after manual completion; independent manual dispositions are preserved.
+- Add separate Pending Guided Review and Pending Manual Testing filters, align Overview/Final Checklist counts with the same backend queue projection, and surface outstanding WCRs immediately.
+- Render linked WCR validation and disposition inline within the selected manual activity; open the next pending candidate by default.
+- Offer ADDRESSED IN GUIDED REVIEW only when all associated candidates are dispositioned and current, with backend validation retained.
+- Update Guided Runtime lifecycle summary after effective coverage changes without erasing original collection provenance.
+- Audit all observed M2-p2 reports and current documents; defer structural report consolidation pending compatibility and evidence-integrity decisions, rather than deleting reports speculatively.
+
+## v2.2.0-M2-p2 (development patch; internal version 2.2.0)
+
+- Consolidate tester testing into a unified deduplicated Testing Queue with verified candidate/case joins, queue-wide completion counts, and explicit guided-coverage affirmation.
+- Introduce one application-level, external-tool testing activity when the attack-surface plan exists, avoiding a separate mandatory 26-area checklist.
+- Support optional, explicitly labeled client-facing notes in Guided Review and Manual Test Cases while keeping internal notes and saved legacy evidence references private.
+- Render only tester-supplied client-facing notes in the sanitized Client Appendix HTML, independent of supporting-report inclusion.
+- Fix Windows native picker threading with a main-thread subprocess dialog; suppress duplicate Guided Runtime start requests from the browser.
+- Preserve current assessment locks, fingerprints, hash manifests, export eligibility, and immutable collected evidence.
+
 ## v2.1.0 — Accepted provenance usability baseline (October 15, 2026)
+
+## v2.2.0 (Development — Tester Workspace Milestone 2, patch p1)
+
+- Clarify Client Appendix per-observation evidence access without exposing excluded source reports or expanding the privacy allowlist.
+- Simplify the Tester Workspace Final Checklist: remove the redundant Verify Assessment Integrity button and end with Generate Client Appendix, preserving backend integrity checks and warning on unfinished manual testing.
+- Display global issue notifications only for actionable errors; routine successes are confirmed inline instead of interrupting the tester.
+- Refresh outdated Procmon/DLL capture-version wording in generated procedures.
+- Add a Guided Review relationship filter and direct links to explicitly related candidates while preserving manual test-case tracking independently.
+
+## v2.2.0 (Development — Tester Workspace Milestone 2)
+
+- Consolidated Guided Review and manual Tester Workflow into one Tester Workspace with Overview, Guided Review, Manual Test Cases, Evidence & Guidance and Final Checklist panes; underlying saved review state remains separate.
+- Added case search/filter by ID/title/report, status and category, direct case instructions and read-only inline previews of verified supporting reports (e.g., TC-IN-001 installer analysis and technology reports). Missing reports are not linked.
+- Preserved integrity gating, optional notes, candidate status behavior and version compatibility. v2.1.0 remains the accepted release; M2 is a Windows validation candidate.
+
+## v2.2.0 (Development — Tester Workflow Milestone 1)
+
+- Added local GUI Tester Workflow and step-by-step post-collection guidance.
+- Added integrity-tracked, separate manual test-case decisions, evidence references and optional notes.
+- Preserved version-gated, read-only legacy assessments and existing v2.1.0 accepted baseline.
+- Added regression coverage for save, reload, rollback, stale fingerprints, and legacy versions.
+- Development M1 patch p1: classify a repeat browser checkpoint response as already answered even if the background worker has removed the checkpoint file; add deterministic regression coverage.
+- Development M1 patch p2: retry transient Windows assessment-state JSON replace denials with unique temporary files; preserve prior state on persistent denial and prevent duplicate misleading module/interruption failures. Add targeted regression tests and recovery guidance.
+- Pending native Windows functional validation; PNG branding integration pending original artwork bytes.
+
 
 - Move Collection Provenance immediately below the title on technical evidence reports only.
 - Remove generated provenance footer clutter from summaries, test cases, tester review, and coverage reports.

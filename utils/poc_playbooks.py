@@ -433,6 +433,38 @@ def candidate_poc(item: dict, root: Path | None = None) -> tuple[str, ...]:
     return tuple(steps)
 
 
+# References only. Test applicability and completeness are determined by the
+# integrity-protected Testing Queue, not by these suggested associations.
+SURFACE_QUEUE_REFERENCE = {
+ 'DLL search-order hijacking': 'TC-DL-001',
+ 'Executable/helper search-path hijacking': 'TC-AR-002 / TC-AR-004',
+ 'Reparse point / symlink / junction abuse': 'TC-FS-001 / TC-PB-001',
+ 'IFEO / SilentProcessExit injection': 'TC-RG-001',
+ 'Service path and configuration abuse': 'TC-SV-001 / TC-PB-001',
+ 'Scheduled task privilege boundary': 'TC-TS-001',
+ 'Driver and kernel-facing attack surface': 'TC-DR-001',
+ 'COM registration and activation hijacking': 'TC-RG-001 / TC-AS-001',
+ 'Registry persistence and execution abuse': 'TC-RG-001',
+ 'Process creation and command construction': 'TC-AR-002 / TC-AR-004',
+ 'Process injection and cross-process memory access': 'TC-AR-003 / TC-AR-004',
+ 'Named pipe and local IPC authorization': 'TC-IP-001 / TC-IP-002',
+ 'Localhost service / local API authorization': 'TC-NW-002',
+ 'Network transport and remote trust': 'TC-NW-001 / TC-NW-002',
+ 'Local storage, embedded secrets and information disclosure': 'TC-LS-001 / TC-CF-001',
+ 'Update mechanism integrity, staging and rollback': 'TC-UP-001 / TC-UP-004',
+ 'Digital signing and provenance': 'TC-SG-001 / TC-IN-001',
+ 'PE exploit mitigations and memory hardening': 'TC-PE-001',
+ 'Stack memory corruption': 'TC-MC-001 / TC-AS-001',
+ 'Heap memory corruption': 'TC-MC-001 / TC-AS-001',
+ 'Cryptography and key management': 'TC-MC-001 / TC-CF-001 / TC-AS-001',
+ 'Installer and custom-action privilege boundary': 'TC-MS-001',
+ '.NET / managed runtime dynamic behavior': 'TC-AR-001 / TC-AR-004',
+ 'Electron / WebView / embedded browser surface': 'TC-AS-001',
+ 'Authentication, authorization and client-side trust': 'TC-AS-001',
+ 'Input handling and local data-access flaws': 'TC-AS-001',
+}
+
+
 def render_plan(root: Path, state: dict) -> None:
     items = list(state.get('items', {}).values())
     collection = {}
@@ -443,6 +475,13 @@ def render_plan(root: Path, state: dict) -> None:
         collection = {m.group(1).strip(): m.group(2) for m in re.finditer(
             r'(?m)^([^\n:]{4,55}?)\s+: (AUTOMATIC INDICATOR|NOT OBSERVED|COLLECTION UNAVAILABLE)\s*$', observed)}
     lines = ['WCA - WINDOWS THICK CLIENT ATTACK SURFACE TEST PLAN', '=' * 104, '',
+             'HOW TO USE: OPTIONAL METHODOLOGY REFERENCE - NOT A SECOND TESTING CHECKLIST',
+             'Record applicable tests and WCR dispositions in Tester Workspace > Testing Queue.',
+             'A related TC/WCR is a navigation hint, not evidence that this surface was fully tested.',
+             'A surface with no automated indicator may still need scope-specific testing.', '',
+             'QUICK INDEX (SUGGESTED QUEUE REFERENCES; AVAILABILITY DEPENDS ON ASSESSMENT):',
+             *[f'  {i:02d}. {name}  ->  {SURFACE_QUEUE_REFERENCE.get(name, "TC-AS-001 / engagement scope")}'
+               for i,(name,*_) in enumerate(CATEGORIES,1)], '',
              'This vendor-neutral methodology covers a broad set of Windows thick-client attack surfaces and is not tied to any single application, framework, or training fixture.',
              'The list is intentionally extensible rather than a claim that every possible application-specific weakness fits a fixed taxonomy.',
              'AUTOMATIC INDICATOR is a related observation, NOT a confirmed vulnerability or proof of impact.',
@@ -462,7 +501,9 @@ def render_plan(root: Path, state: dict) -> None:
             status = 'COLLECTION UNAVAILABLE - GUIDED TEST AVAILABLE'
         else:
             status = 'GUIDED ONLY - NOT AUTOMATICALLY DETECTED'
-        lines.extend([f'{index:02d}. {name.upper()}', '-' * 104, 'Coverage: ' + status,
+        lines.extend([f'{index:02d}. {name.upper()}', '-' * 104,
+                      'Related Testing Queue reference (when applicable): ' + SURFACE_QUEUE_REFERENCE.get(name, 'TC-AS-001 / engagement scope'),
+                      'Coverage: ' + status,
                       'Linked review candidates: ' + (', '.join(v['id'] for v in matches) if matches else '(none)'),
                       '', 'PRECONDITIONS / DISCOVERY', prerequisite, ''])
         if matches:
@@ -495,5 +536,6 @@ def render_plan(root: Path, state: dict) -> None:
                       'If the target path is not writable by the intended lower-trust identity, a legitimate file already exists, '
                       'the application/service action is not authorized, or the expected event cannot be reproduced, stop. '
                       'An unsuccessful marker or missing telemetry is inconclusive, not proof of safety.', '',
-                      'Do not mark this category complete based only on a reviewer disposition.', ''])
+                      'Do not mark this category complete based only on a reviewer disposition.',
+                      'Use the Testing Queue for all applicable tracking; do not repeat a completed procedure.', ''])
     _atomic_text(artifact_path(root, 'attack_surface_test_plan.txt'), '\n'.join(lines).rstrip() + '\n')

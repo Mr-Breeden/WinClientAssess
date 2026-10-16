@@ -26,12 +26,12 @@ Optional coverage gaps may still exist on a completed assessment; they must rema
 
 ## Export contents
 
-- `assessment_report.html` — portable offline technical overview with an evidence-grounded scope and footprint, grouped reviewed observations, theme switch and approved evidence navigation; no tester notes or confirmation claims;
+- `assessment_report.html` — portable offline technical overview with an evidence-grounded scope and footprint, grouped reviewed observations, theme switch, approved evidence navigation, and **explicitly entered client-facing notes only**; no internal tester notes or vulnerability confirmation claims;
 - `README.txt` — interpretation and provenance notice;
 - `SHA256SUMS.txt` — checksum for every other included file;
 - `evidence/*.txt` — present reports from a strict sanitized allowlist: application profile, coverage, signing, PE security, configuration, service, permissions, network and IPC summaries, plus `collection_provenance.txt` when present and integrity-verified.
 
-The export never includes secret-scanner details, raw/working Procmon records, snapshots, source/decompiled files, internal state/manifests, reviewer notes, or NOT APPLICABLE items. Only already generated and approved reports are copied. The original assessment tree, state, manifests and reviewer decisions are unchanged.
+The export never includes secret-scanner details, raw/working Procmon records, snapshots, source/decompiled files, internal state/manifests, internal tester notes, or NOT APPLICABLE observation rows. Explicit client-facing notes may describe N/A testing context. Only already generated and approved reports are copied. The original assessment tree, state, manifests and reviewer decisions are unchanged.
 
 Inspect the client appendix for appropriate disclosure scope before sending it. The full tester dashboard and backend assessment should not be treated as equivalent deliverables.
 
@@ -42,3 +42,7 @@ The client appendix defaults to a dark theme; a **Light theme** control toggles 
 ## Collection provenance
 
 The optional v2.1.0 [Collection Provenance](collection-provenance.md) report contains privacy-preserving invocation shapes and collector identifiers, never raw PowerShell scripts, positional arguments, environment variables, or secrets. The exporter includes this report only when present in the verified evidence allowlist and never exports `working/collection_provenance_state.json`. Review approved technical evidence for engagement-specific disclosure before delivery.
+
+## Optional tester-approved notes (M2-p2)
+
+Both Guided Review and Manual Test Case activity editors offer a distinct **Client-Facing Notes** field. Text entered there will appear under **Tester-approved assessment notes** in `assessment_report.html`, even when the associated manual case has no approved technical report in the sanitized ZIP. No screenshot or separate evidence reference is required. The internal notes field and prior internal evidence reference are never exported. Do not use these notes to duplicate the formal pentest findings report. WCA sanitizes and HTML-escapes output, but the tester must review the exported result before delivery.

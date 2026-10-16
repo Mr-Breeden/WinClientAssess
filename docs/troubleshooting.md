@@ -8,6 +8,12 @@ Run `install_dependencies.ps1`, verify Python imports, and review `docs/optional
 
 Do not continue with target activity/system-state analysis if the Baseline Snapshot failed. Revert the VM to the known-good snapshot and start a new assessment. A damaged critical checkpoint is not repaired automatically.
 
+## Full Assessment stops saving `working/assessment_state.json` (Windows WinError 5)
+
+A failure replacing `assessment_state.json.tmp` with `assessment_state.json` occurs **after collection** when WCA commits the lifecycle/module status. It does not on its own prove that the preceding collector (e.g. Secrets Review) failed. WCA v2.2.0 development M1 patch p2 retries brief Windows replace/access/sharing contention using unique temporary files, while failing closed when access remains denied. It does not override filesystem ACLs or external software locks.
+
+Preserve the interrupted assessment folder and worker log before troubleshooting. Confirm the assessment worker has stopped. From PowerShell, inspect the actual folder and file (`Get-Item -Force`, `Get-Acl`) and whether local security software, file indexing, an editor or another process is holding the state file. Do not disable endpoint protection merely to pass the test. A fresh *approved* local output directory outside synchronised or heavily monitored folders can help isolate the cause. If the state file is still inaccessible, obtain permission/lock resolution through the host's approved administration process. Do not delete/rewrite `assessment_state.json`, its temporary files, or the integrity manifest to force a completed status. For Full Assessment, restore the VM snapshot and start clean where the lifecycle cannot safely be resumed.
+
 ## Portable directory has multiple executables
 
 Interactive mode prompts for the primary executable. In non-interactive mode supply `--primary-executable`. Do not select a setup/uninstaller/helper executable merely to avoid the prompt; choose the process that represents the primary assessed application.

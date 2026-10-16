@@ -165,3 +165,8 @@ This is a copy-only, gated technical appendix, not a vulnerability report. Expor
 ## JSON-safe status and tool readiness (v2.1.0)
 
 For a read-only frontend, use `python .\wca.py --backend-action capabilities` and `--backend-action status --backend-assessment C:\Assessments\Case`. Other read-only operations: `tool_readiness`, `verify`, `review`, `appendix_readiness`. JSON output contains `schema`, `ok`, `code`, `message`, `data`, and `errors`; this does not launch a GUI. See `docs/backend-service.md`.
+
+
+### Windows Administrator privilege preflight (M2-p5)
+
+On Windows, `python .\wca.py --gui` requests UAC elevation at startup when launched from a normal user console. UAC approval launches a new WCA process using the current Python interpreter, same arguments, and current working directory; use the new elevated console's private GUI URL. Canceling UAC cleanly exits without starting the GUI. Full-mode CLI and standalone Guided Runtime request elevation as needed; background GUI workers do not invoke UAC. Read-only CLI operations, `--help`, `--version`, and static-mode CLI do not require Administrator privileges. If the elevated token is still unavailable, WCA refuses to enter a UAC prompt loop.

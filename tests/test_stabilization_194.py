@@ -89,6 +89,6 @@ def test_validation_script_has_exit_checks_and_dev_requirements():
     assert '$LASTEXITCODE' in source
     for fragment in ("'-m','pytest','-q'", "'--audit-only'", "'--backend-action','capabilities'"):
         assert fragment.replace('package_release.py', 'package_release.py') in source
-    assert "WCA 2.1.0 version string not detected" in source
+    assert "WCA 2.2.0 version string not detected" in source
     assert 'pytest' in Path('requirements-dev.txt').read_text(encoding='utf-8')
     assert 'TestDependencies' in Path('install_dependencies.ps1').read_text(encoding='utf-8')

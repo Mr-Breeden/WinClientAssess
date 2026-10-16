@@ -157,4 +157,4 @@ def test_tool_versions_do_not_execute_external_programs(monkeypatch):
 
 def test_windows_script_checks_current_version_exactly():
     script = Path("scripts/validate_windows.ps1").read_text(encoding="utf-8")
-    assert "-notmatch 'WCA 2\\.1\\.0'" in script
+    assert "-notmatch 'WCA 2\\.2\\.0'" in script

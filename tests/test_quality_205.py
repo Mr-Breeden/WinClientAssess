@@ -1,4 +1,4 @@
-"""v2.1.0 release consistency and security-focused permissions attribution."""
+"""v2.2.0 release consistency and security-focused permissions attribution."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -116,7 +116,7 @@ def test_current_documentation_links_and_release_identity():
         assert name == 'README.md' or source.strip()
         if name in {'README.md', 'RELEASE_NOTES.md', 'docs/getting-started.md',
                     'docs/windows-environment-setup.md', 'docs/gui-guide.md', 'docs/windows-validation.md'}:
-            assert '2.1.0' in source, name
+            assert '2.2.0' in source, name
         for link in re.findall(r'(?<!!)\[[^]]+\]\(([^)]+)\)', source):
             if link.startswith(('http:', 'https:', '#','mailto:')):
                 continue
