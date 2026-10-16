@@ -1,4 +1,4 @@
-"""WCA v2.1.0 loopback-only GUI adapter.
+"""WCA v2.2.0 loopback-only GUI adapter.
 
 No new collectors. Mutations are delegated to the v1.9.6-derived BackendService
 or to private Python workers, where tester checkpoints are acknowledged in the browser.
@@ -30,6 +30,7 @@ from utils.guided_review import read_review, validation_commands, _guide
 from utils.poc_playbooks import candidate_validation
 from utils.privacy import sanitize_report_text
 from utils.web_worker import atomic_json
+from utils.manual_test_workflow import read_manual_workflow, read_manual_detail, save_manual_decision, testing_queue
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ASSETS = PROJECT_ROOT / 'gui'
@@ -93,8 +94,15 @@ def overview_snapshot(root: Path, service: BackendService) -> dict:
             review_summary = {'total': len(review.get('items') or {}),
                               'pending': counter.get('PENDING', 0)}
         runtime = runtime_history(root, verified=True)
+    manual = {'total': 0, 'resolved': 0, 'remaining': 0, 'available': False}
+    if info.get('integrity', {}).get('status') == 'PASS' and info.get('status') == 'COMPLETED':
+        try:
+            manual = {**read_manual_workflow(root), 'available': True}
+            manual.pop('items', None)
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
     return {'ok': True, 'code': 'OK', 'message': 'Overview available.',
-            'data': {'status': info, 'review': review_summary, 'runtime': runtime}}
+            'data': {'status': info, 'review': review_summary, 'runtime': runtime, 'manual': manual}}
 
 
 
@@ -176,6 +184,7 @@ def review_condition_detail(root: Path, identifier: object) -> dict:
         'artifacts': [Path(str(a)).name for a in (item.get('artifacts') or [])][:30],
         'test_cases': [safe(case, 80) for case in (item.get('test_cases') or [])][:30],
         'notes': safe(item.get('notes'), 4000),
+        'client_notes': safe(item.get('client_notes'), 4000),
         'evidence': safe(item.get('evidence'), 6000),
         'description': safe(item.get('description'), 4500),
         'prerequisites': safe(plan.get('prerequisites')),
@@ -258,7 +267,7 @@ def _validated_job_inputs(payload: dict) -> tuple[Path, list[str], str]:
 
 class JobManager:
     """One CLI worker per assessment; never launches a target or PoC itself."""
-    def __init__(self, version: str = '2.1.0', catalog: RecentAssessments | None = None):
+    def __init__(self, version: str = '2.2.0', catalog: RecentAssessments | None = None):
         self.catalog = catalog or RecentAssessments()
         self.version = version
         self.jobs: dict[str, dict] = {}
@@ -337,14 +346,17 @@ class JobManager:
             job = self.jobs.get(job_id)
             if not job or job['process'].poll() is not None:
                 raise ValueError('The assessment job is no longer running.')
+            # The worker may remove checkpoint.json as soon as it consumes a
+            # response. Check the last acknowledged ID first so a duplicate
+            # cannot race that cleanup and produce an inconsistent error.
+            if job.get('sent_checkpoint') == checkpoint_id:
+                raise ValueError('Checkpoint response was already sent.')
             checkpoint_path = job['directory'] / 'checkpoint.json'
             if not checkpoint_path.is_file():
                 raise ValueError('There is no pending tester checkpoint.')
             checkpoint = json.loads(checkpoint_path.read_text(encoding='utf-8'))
             if not secrets.compare_digest(str(checkpoint.get('id')), str(checkpoint_id)):
                 raise ValueError('Checkpoint has changed. Refresh the job view.')
-            if job.get('sent_checkpoint') == checkpoint_id:
-                raise ValueError('Checkpoint response was already sent.')
             kind = checkpoint.get('kind')
             if not isinstance(answer, str) or len(answer) > 2048:
                 raise ValueError('Invalid response.')
@@ -424,7 +436,7 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
 
     def safe_action_error(route: str, payload: dict | None, exc: Exception) -> dict:
         """Stable, non-sensitive diagnostics without exposing local paths or notes."""
-        operations = {'/api/mutate': 'Assessment maintenance', '/api/select': 'Open assessment',
+        operations = {'/api/manual-tests': 'Manual test decision', '/api/mutate': 'Assessment maintenance', '/api/select': 'Open assessment',
                       '/api/start': 'Start assessment job', '/api/job/respond': 'Worker checkpoint',
                       '/api/pick': 'Browse for a file or folder'}
         operation = operations.get(route, 'GUI action')
@@ -542,6 +554,19 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                 if route == '/api/recent':
                     self._json({'ok': True, 'assessments': catalog.list_recent(jobs.list_jobs())})
                     return
+                if route == '/api/client-notes':
+                    from utils.client_appendix import client_note_preview
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, 'notes': client_note_preview(root)})
+                    return
+                if route == '/api/manual-tests':
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, 'data': read_manual_workflow(root)})
+                    return
+                if route == '/api/manual-test':
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, 'data': read_manual_detail(root, query.get('case_id'))})
+                    return
                 if route == '/api/runtime-history':
                     root = safe_assessment_root(query.get('assessment'))
                     self._json({'ok': True, 'history': runtime_history(root)})
@@ -611,7 +636,8 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                         kwargs.update(candidate_id=payload.get('candidate_id'),
                                       disposition=payload.get('disposition'),
                                       fingerprint=payload.get('fingerprint'),
-                                      notes=payload.get('notes', ''))
+                                      notes=payload.get('notes', ''),
+                                      client_notes=payload.get('client_notes', ''))
                         if not isinstance(kwargs['notes'], str) or len(kwargs['notes']) > 8000:
                             raise ValueError('Invalid review notes.')
                     if action == 'export_appendix':
@@ -627,6 +653,19 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                             'outcome': 'NOT CONFIRMED',
                             'next_step': 'Verify the current assessment state and integrity before retrying.'}
                     self._json(response, 200 if response['ok'] else 409)
+                    return
+                if route == '/api/manual-tests':
+                    if payload.get('confirmed') is not True:
+                        raise ValueError('Explicit tester confirmation required.')
+                    root = safe_assessment_root(payload.get('assessment'))
+                    saved = save_manual_decision(root, case_id=payload.get('case_id'),
+                        fingerprint=payload.get('fingerprint'), status=payload.get('status'),
+                        notes=payload.get('notes', ''),
+                        evidence_reference=payload.get('evidence_reference', ''),
+                        client_notes=payload.get('client_notes', ''),
+                        current_version=version)
+                    self._json({'ok': True, 'message': 'Manual test decision saved and integrity verified.',
+                                'data': saved})
                     return
                 if route == '/api/select':
                     root = safe_assessment_root(payload.get('assessment'))
@@ -653,20 +692,12 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                     kind = payload.get('kind')
                     if os.name != 'nt' or kind not in ('file', 'folder'):
                         raise ValueError('Native picker unavailable.')
-                    import tkinter as tk
-                    from tkinter import filedialog
-                    window = tk.Tk()
-                    try:
-                        window.withdraw()
-                        window.attributes('-topmost', True)
-                        if kind == 'file':
-                            path = filedialog.askopenfilename(title='Choose target executable / installer',
-                                                               filetypes=[('EXE / MSI', '*.exe *.msi'), ('All files', '*.*')])
-                        else:
-                            path = filedialog.askdirectory(title='Choose directory')
-                    finally:
-                        window.destroy()
-                    self._json({'ok': True, 'path': path or ''})
+                    # Tk must own its dialog on the *main* thread of a dedicated
+                    # interpreter. ThreadingHTTPServer request threads cannot use
+                    # Tk dialogs reliably on Windows (RuntimeError: main thread).
+                    from utils.native_picker import pick_native_path
+                    path = pick_native_path(kind)
+                    self._json({'ok': True, 'path': path})
                     return
                 self._json({'ok': False, 'message': 'Not found.'}, 404)
             except (ValueError, OSError, UnicodeError, json.JSONDecodeError) as exc:
@@ -675,7 +706,7 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
     return GUIHandler
 
 
-def make_server(port: int = 9001, *, version: str = '2.1.0', jobs: JobManager | None = None,
+def make_server(port: int = 9001, *, version: str = '2.2.0', jobs: JobManager | None = None,
                 token: str | None = None, catalog: RecentAssessments | None = None) -> ThreadingHTTPServer:
     if not 0 <= port <= 65535:
         raise ValueError('Invalid port.')
@@ -697,7 +728,7 @@ def make_server(port: int = 9001, *, version: str = '2.1.0', jobs: JobManager | 
     return server
 
 
-def serve_gui(port: int = 9001, version: str = '2.1.0'):
+def serve_gui(port: int = 9001, version: str = '2.2.0'):
     server = make_server(port=port, version=version)
     url = f'http://127.0.0.1:{server.server_port}/#session={server.wca_token}'
     print(f'WCA v{version} private GUI session URL: {url}')

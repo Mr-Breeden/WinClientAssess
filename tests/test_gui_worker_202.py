@@ -81,6 +81,25 @@ def test_browser_worker_checkpoint_roundtrip_without_console(tmp_path, monkeypat
         worker.close()
 
 
+def test_duplicate_checkpoint_rejected_after_worker_consumes_file(tmp_path):
+    """A double-click must be detected even if worker removed its prompt."""
+    from types import SimpleNamespace
+    jobs = gui.JobManager(catalog=RecentAssessments(tmp_path / 'private-catalog.json'))
+    try:
+        jobs.jobs['test-id'] = {
+            'process': SimpleNamespace(poll=lambda: None),
+            'directory': tmp_path,
+            'sent_checkpoint': 'already-accepted',
+        }
+        assert not (tmp_path / 'checkpoint.json').exists()
+        with pytest.raises(ValueError, match='already sent'):
+            jobs.respond('test-id', 'already-accepted', 'yes')
+        with pytest.raises(ValueError, match='no pending tester checkpoint'):
+            jobs.respond('test-id', 'different-id', 'yes')
+    finally:
+        jobs.close()
+
+
 def test_browser_worker_api_auth_and_checkpoint_confirmation(monkeypatch, tmp_path):
     root = tmp_path / 'case'
     jobs = gui.JobManager(catalog=RecentAssessments(tmp_path / 'private-catalog.json'))

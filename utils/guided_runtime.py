@@ -437,6 +437,12 @@ def _run_guided_runtime_impl(root: Path, *, version: str, methodology_version: s
         output_fn(f"[✓] Review/dashboard refresh complete: {new_findings} new review candidate(s)")
 
         state.data["coverage"] = coverage
+        # The original completion message may describe pre-runtime optional gaps.
+        # Preserve initial collection history elsewhere; current lifecycle
+        # summary must reflect the effective post-observation coverage.
+        state.data["last_message"] = (
+            f"Guided Runtime completed; effective coverage: {coverage}."
+        )
         state.data["guided_runtime"] = {
             "schema_version": 3,
             "sessions": len(sessions),

@@ -1,4 +1,4 @@
-# WCA v2.1.0 — Offline tester dashboard
+# WCA v2.2.0 — Offline tester dashboard
 
 `reports/assessment_report.html` is the self-contained offline, printable, read-only tester dashboard generated from verified review and assessment state.
 
@@ -17,3 +17,8 @@ The generated offline HTML defaults to dark mode. Use **Light theme** in the sti
 The review section uses a searchable two-pane workspace when JavaScript is available: filter by status, module, or text; choose a condition to display its evidence and optional validation procedure. A restrictive hash-authorized offline script implements only local presentation. When scripts are disabled, the original grouped review details remain visible for browsing without data loss. Review decisions are saved through the WCA CLI or the local GUI Guided Review tab, never directly through the standalone report.
 
 Automated review points are source indicators, not confirmed vulnerabilities. Candidate notes remain tester-only and are never copied to the Client Appendix.
+
+
+### M2-p3 Testing Queue source of truth
+
+The offline dashboard is a read-only snapshot, not a live activity tracker; it must not claim current completion based on unsynchronized saved review state. Open the local authenticated GUI Tester Workspace > Testing Queue for current status. The queue uses one backend projection and considers pending/changed linked WCR candidates even when manual procedures are marked complete.

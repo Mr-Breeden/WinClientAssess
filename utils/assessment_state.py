@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -36,15 +38,50 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# The local GUI may read state while Windows security software scans it.
+# Windows rename/replace can reject an otherwise valid atomic update briefly.
+# Retry only access/sharing denials; other errors must stop collection.
+_REPLACE_ATTEMPTS = 10
+
+
+def _retryable_replace_error(exc: OSError) -> bool:
+    # winerror 5 = access denied; 32/33 = sharing/lock violation.
+    # errno handles equivalent errors in the portable regression tests.
+    import errno
+    return (getattr(exc, "winerror", None) in (5, 32, 33)
+            or getattr(exc, "errno", None) in (errno.EACCES, errno.EPERM, errno.EBUSY))
+
+
 def _atomic_json(path: Path, data: dict[str, Any]) -> None:
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_name(path.name + ".tmp")
-    with temp.open("w", encoding="utf-8", newline="\n") as handle:
-        json.dump(data, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-        handle.flush()
-        os.fsync(handle.fileno())
-    os.replace(temp, path)
+    # A unique sibling temp avoids simultaneous writes trampling one .tmp name.
+    # Same-directory replace still provides an atomic state-file transition.
+    fd, name = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    temp = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(data, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        for attempt in range(_REPLACE_ATTEMPTS):
+            try:
+                os.replace(temp, path)
+                return
+            except OSError as exc:
+                if not _retryable_replace_error(exc) or attempt == _REPLACE_ATTEMPTS - 1:
+                    raise
+                time.sleep(min(0.05 * 2 ** attempt, 0.5))
+    finally:
+        # If the destination is permanently inaccessible, leave the prior
+        # authoritative state untouched; do not retain an orphan temp copy.
+        try:
+            temp.unlink(missing_ok=True)
+        except OSError:
+            # Preserve the original replace/write exception when Windows also
+            # briefly locks cleanup. Do not substitute an unrelated traceback.
+            pass
 
 
 class AssessmentState:

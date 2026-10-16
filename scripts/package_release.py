@@ -24,10 +24,19 @@ TOP_LEVEL_FILES = {
     "SECURITY.md", "install_dependencies.ps1", "pyproject.toml",
     "requirements.txt", "requirements-dev.txt", "tool_paths.example.json", "wca.py",
 }
-TOP_LEVEL_DIRS = {"docs", "gui", "modules", "scripts", "tests", "utils"}
+TOP_LEVEL_DIRS = {"assets", "docs", "gui", "modules", "scripts", "tests", "utils"}
+BRAND_ASSETS = {"WinClientAssess-v2.2.0.png"}
 LOCAL_CONFIG_FILES = {"tool_paths.json"}  # user machine paths; never packaged
+# Tester distribution omits developer-facing source control, unit tests and
+# packaging/validation tooling. All runtime and authorized PoC helpers remain.
+TESTER_EXCLUDED_TOP_LEVEL_FILES = {
+    ".gitattributes", ".gitignore", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md",
+    "requirements-dev.txt",
+}
+TESTER_EXCLUDED_DIRS = {"assets", "tests"}
+TESTER_EXCLUDED_SCRIPTS = {"package_release.py", "validate_windows.ps1"}
 CANONICAL_DOCS = {
-    "artifact-policy.md", "collection-provenance.md", "assessment-integrity.md", "assessment-lifecycle.md",
+    "artifact-policy.md", "manual-testing-workflow.md", "collection-provenance.md", "assessment-integrity.md", "assessment-lifecycle.md",
     "client-appendix.md", "backend-service.md", "gui-guide.md",
     "guided-review.md", "guided-runtime.md", "getting-started.md", "installation.md",
     "attack-surface-coverage.md", "methodology.md", "optional-tools.md",
@@ -69,6 +78,9 @@ def audit_tree() -> list[str]:
     issues += [f"Unexpected/historical doc: docs/{name}" for name in sorted(unexpected_docs)]
     issues += [f"Missing canonical doc: docs/{name}" for name in sorted(missing_docs)]
 
+    assets = {p.name for p in (ROOT / "assets").glob("*") if p.is_file()}
+    issues += [f"Unexpected branding asset: assets/{name}" for name in sorted(assets - BRAND_ASSETS)]
+    issues += [f"Missing versioned branding asset: assets/{name}" for name in sorted(BRAND_ASSETS - assets)]
     scripts_dir = ROOT / "scripts"
     scripts = {p.name for p in scripts_dir.iterdir() if p.is_file()}
     unexpected_scripts = scripts - CANONICAL_SCRIPTS
@@ -89,13 +101,17 @@ def audit_tree() -> list[str]:
     return sorted(set(issues))
 
 
-def iter_release_files():
+def iter_release_files(*, tester: bool = False):
     for name in sorted(TOP_LEVEL_FILES):
+        if tester and name in TESTER_EXCLUDED_TOP_LEVEL_FILES:
+            continue
         path = ROOT / name
         if not path.is_file():
             raise FileNotFoundError(f"Required release file missing: {name}")
         yield path
     for dirname in sorted(TOP_LEVEL_DIRS):
+        if tester and dirname in TESTER_EXCLUDED_DIRS:
+            continue
         base = ROOT / dirname
         if not base.is_dir():
             raise FileNotFoundError(f"Required release directory missing: {dirname}")
@@ -105,22 +121,25 @@ def iter_release_files():
                 continue
             if path.suffix.lower() in DISALLOWED_SUFFIXES:
                 continue
+            if tester and dirname == "scripts" and path.relative_to(base).parts[0] in TESTER_EXCLUDED_SCRIPTS:
+                continue
             yield path
 
 
-def build(output_dir: Path) -> tuple[Path, Path]:
+def build(output_dir: Path, *, tester: bool = False) -> tuple[Path, Path]:
     issues = audit_tree()
     if issues:
         raise RuntimeError("Release audit failed:\n- " + "\n- ".join(issues))
     version = _load_version()
     stem = f"WCA-v{version}"
+    package_stem = f"{stem}-Tester" if tester else stem
     output_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = output_dir / f"{stem}.zip"
-    checksum_path = output_dir / f"{stem}.sha256.txt"
+    zip_path = output_dir / f"{package_stem}.zip"
+    checksum_path = output_dir / f"{package_stem}.sha256.txt"
     if zip_path.exists():
         zip_path.unlink()
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-        for path in iter_release_files():
+        for path in iter_release_files(tester=tester):
             arcname = Path(stem) / path.relative_to(ROOT)
             zf.write(path, arcname.as_posix())
     digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()
@@ -131,6 +150,7 @@ def build(output_dir: Path) -> tuple[Path, Path]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit and package the current WCA source release")
     parser.add_argument("--audit-only", action="store_true")
+    parser.add_argument("--tester-package", action="store_true", help="Create minimal tester ZIP, preserving runtime and PoC helpers but excluding tests/build tooling")
     parser.add_argument("--output-dir", default=str(ROOT.parent))
     args = parser.parse_args()
     issues = audit_tree()
@@ -142,7 +162,7 @@ def main() -> int:
     print("Release audit: PASS")
     if args.audit_only:
         return 0
-    zip_path, checksum_path = build(Path(args.output_dir).resolve())
+    zip_path, checksum_path = build(Path(args.output_dir).resolve(), tester=args.tester_package)
     print(zip_path)
     print(checksum_path)
     return 0

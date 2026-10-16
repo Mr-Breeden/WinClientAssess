@@ -62,8 +62,9 @@ from utils.guided_runtime import run_guided_runtime
 from utils.client_appendix import export_client_appendix, ClientAppendixError
 from utils.operation_lock import assessment_operation, AssessmentBusyError
 from utils.backend_service import BackendService
+from utils.elevation import is_administrator, launch_elevated, ElevationError
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
 METHODOLOGY_VERSION = "1.9"
 ARTIFACT_CATALOG_VERSION = "2.0"
 PRODUCT_SHORT = "WCA"
@@ -119,12 +120,40 @@ def banner():
 
 
 def _is_admin():
-    if os.name != "nt":
-        return False
+    """Compatibility wrapper used by full-mode privilege checks."""
+    return is_administrator()
+
+
+def _windows_host() -> bool:
+    return os.name == "nt"
+
+
+def _require_administrator(args, operation: str) -> None:
+    """Elevate before privileged collection, or exit without writing state."""
+    if _is_admin():
+        return
+    if not _windows_host():
+        raise SystemExit(f"{operation} requires Administrator privileges on Windows.")
+    if args.wca_elevation_attempted:
+        raise SystemExit(
+            f"{operation} requires Administrator privileges. The elevation request "
+            "did not result in an elevated token; no further UAC attempts will be made."
+        )
+    # Worker requests must inherit elevation from their trusted local GUI
+    # process; they must not independently trigger unexpected UAC prompts.
+    if args.gui_preselected_options or WEB_CONTROL is not None:
+        raise SystemExit(
+            f"{operation} requires an elevated WCA GUI session. "
+            "Restart the GUI with Administrator privileges."
+        )
+    console.print(f"[yellow]{operation} requires Administrator privileges. Requesting Windows UAC approval...[/yellow]")
     try:
-        return bool(ctypes.windll.shell32.IsUserAnAdmin())
-    except Exception:
-        return False
+        launch_elevated()
+    except ElevationError as exc:
+        raise SystemExit(str(exc)) from exc
+    console.print("[green]Elevated WCA process launched. Continue in its new console window.[/green]")
+    # This unelevated process must not continue into any assessment writes.
+    raise SystemExit(0)
 
 
 def parse_args():
@@ -173,6 +202,7 @@ def parse_args():
         help="Analyze an existing Procmon CSV instead of, or in addition to, automated runtime capture",
     )
     parser.add_argument("--gui-preselected-options", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--wca-elevation-attempted", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--surface-review",
         action="store_true",
@@ -687,16 +717,18 @@ def run_module(reporter, name, func, *args, **kwargs):
                 finding_with_source.setdefault("source_module", name)
                 reporter.add_finding(**finding_with_source)
         coverage_gap = result.get("coverage_gap", False) if isinstance(result, dict) else False
-        reporter.set_status(name, status, details, coverage_gap=coverage_gap)
-        from utils.collection_provenance import record_native_method
-        record_native_method(name, getattr(func, '__name__', 'internal collector'),
-                             status=('SKIPPED' if status in {'SKIPPED', 'NOT APPLICABLE'} else
-                                     'FAILED' if status == 'ERROR' else 'COMPLETED'))
-        return result if isinstance(result, dict) else {"status": status}
     except Exception as exc:
+        # Only collector errors are module failures. A failure writing the
+        # authoritative lifecycle state is fatal, not a failed Secrets Review.
         reporter.set_status(name, "ERROR", str(exc))
         console.print(f"[red][!][/red] {name} failed: {exc}")
         return {"status": "ERROR", "details": str(exc)}
+    reporter.set_status(name, status, details, coverage_gap=coverage_gap)
+    from utils.collection_provenance import record_native_method
+    record_native_method(name, getattr(func, '__name__', 'internal collector'),
+                         status=('SKIPPED' if status in {'SKIPPED', 'NOT APPLICABLE'} else
+                                 'FAILED' if status == 'ERROR' else 'COMPLETED'))
+    return result if isinstance(result, dict) else {"status": status}
 
 
 # The CLI remains the original entry point. The GUI supplies manual decisions
@@ -728,6 +760,7 @@ def main():
             raise SystemExit("--gui is a standalone launch mode; use the browser to start operations.")
         if not 1 <= args.port <= 65535:
             raise SystemExit("--port must be between 1 and 65535")
+        _require_administrator(args, "WCA GUI")
         from utils.gui_server import serve_gui
         serve_gui(port=args.port, version=VERSION)
         return
@@ -748,6 +781,8 @@ def main():
         return
     banner()
     args = _interactive_entry(args)
+    if args.mode == "full" or args.guided_runtime:
+        _require_administrator(args, "Guided Runtime" if args.guided_runtime else "Full Assessment")
     if args.client_appendix:
         source = Path(args.client_appendix).expanduser().resolve()
         destination = (Path(args.appendix_output).expanduser().resolve() if args.appendix_output
@@ -846,12 +881,8 @@ def main():
                 "The selected assessment directory already contains Windows Client Assessment data. "
                 f"v{VERSION} will not overwrite it silently. Choose a new assessment name or use Assessment Status / Recovery."
             )
-    if mode == "full" and not _is_admin():
-        raise SystemExit(
-            "Full mode requires an elevated Windows terminal so services, drivers, scheduled tasks, "
-            "protected processes, and ACLs can be collected reliably. Reopen PowerShell with "
-            "Run as administrator and rerun the assessment."
-        )
+    if mode == "full":
+        _require_administrator(args, "Full Assessment")
     try:
         with assessment_operation(assessment_dir, "assessment_execution"):
             return _run_assessment_engine(args, installer, target_source, target_type, assessment_name,
@@ -1777,11 +1808,24 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
+        persisted = False
         if ACTIVE_STATE is not None:
-            ACTIVE_STATE.mark_interrupted("Assessment interrupted by the tester. Use Assessment Status / Recovery before continuing.")
-        console.print("\n[yellow]Assessment interrupted. Saved lifecycle state was preserved.[/yellow]")
+            try:
+                ACTIVE_STATE.mark_interrupted("Assessment interrupted by the tester. Use Assessment Status / Recovery before continuing.")
+                persisted = True
+            except OSError:
+                console.print("[red]Could not save interrupted assessment state. Preserve evidence and inspect file access before recovery.[/red]")
+        if persisted:
+            console.print("\n[yellow]Assessment interrupted. Saved lifecycle state was preserved.[/yellow]")
+        else:
+            console.print("\n[yellow]Assessment interrupted. State preservation could not be confirmed.[/yellow]")
         raise SystemExit(130)
     except Exception as exc:
         if ACTIVE_STATE is not None:
-            ACTIVE_STATE.mark_interrupted(f"Assessment stopped unexpectedly: {type(exc).__name__}")
+            try:
+                ACTIVE_STATE.mark_interrupted(f"Assessment stopped unexpectedly: {type(exc).__name__}")
+            except OSError:
+                # Do not mask the original failure with another state-write
+                # traceback or claim the interrupted status was saved.
+                console.print("[red]Unable to persist interruption state; preserve this assessment directory and check Windows file access.[/red]")
         raise

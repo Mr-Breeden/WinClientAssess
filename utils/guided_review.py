@@ -360,7 +360,7 @@ def sync_review(root: Path, findings: list[dict], *, create=True) -> dict:
         status = prior.get('status', 'PENDING') if unchanged else 'PENDING'
         result[stable_id] = {
             **item, 'id': stable_id, 'fingerprint': fingerprint, 'status': status,
-            'notes': prior.get('notes', ''), 'evidence_reference': prior.get('evidence_reference', ''),
+            'notes': prior.get('notes', ''), 'client_notes': prior.get('client_notes', ''), 'evidence_reference': prior.get('evidence_reference', ''),
             'updated_at': prior.get('updated_at', now) if unchanged else now,
             'changed_evidence': bool(prior and not unchanged),
             'previous_status': prior.get('status', '') if prior and not unchanged else '',

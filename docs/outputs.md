@@ -101,3 +101,17 @@ Client Appendix is deliberately a separate ZIP created **outside** the assessmen
 ## Collection provenance (v2.1.0)
 
 Applicable `.txt` reports carry a concise Collection Provenance reference. See [Evidence Collection Provenance](collection-provenance.md) for command privacy, internal method attribution, record-ID stability, skipped modules and reproduction limitations. Raw binary/CSV/JSON evidence retains its original format.
+
+## v2.2.0 manual testing state
+
+- `working/manual_test_review.json`: private, integrity-manifest-tracked manual test-case decisions and optional evidence references/notes. **Not** a duplicate of `tester_review.txt` or `working/tester_review_state.json`. Not included in Client Appendix.
+- `reports/test_cases.txt`: unchanged generated human-readable reference, not the authoritative completion-state file.
+- GUI Tester Workspace: presents one integrity-verified Testing Queue. A completed manual test remains unresolved if any linked Guided Review candidate is pending or changed; underlying decisions remain separate and do not confirm security impact.
+
+## v2.2.0 report inventory and consolidation decision
+
+v2.2.0 retains existing report filenames and valid working-state records. No additional required testing is created by the attack-surface reference plan or optional generated `test_cases.txt`: all applicable completion is tracked once in the GUI Testing Queue. The detailed report-by-report audit is supplied separately in the RC1 handoff. Future installer/system-change/runtime/network-IPC grouping requires explicit file mapping, reference updates, provenance and integrity migration and regression coverage.
+
+## M2-p3 reporting review
+
+The full M2-p3 artifact audit supplied alongside the Windows development package inventories every observed Full Assessment report and the Client Appendix. Grouping options include installer/package details, system changes, IPC/network, and runtime/Procmon slices. **No existing report filenames are deleted in M2-p3.** Consumers and integrity tests still expect their existing separate evidence products, and older assessments must remain readable.

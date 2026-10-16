@@ -1,4 +1,4 @@
-"""WCA v2.1.0 in-process backend contract for future local GUI adapters.
+"""WCA v2.2.0 in-process backend contract for future local GUI adapters.
 
 The loopback GUI adapter is separate; no target launch or automatic PoC invocation.
 The JSON-safe envelopes intentionally exclude raw manifest paths, secrets,
@@ -41,7 +41,7 @@ def envelope(ok: bool, code: str, message: str, data: dict | None = None,
             'data': data if data is not None else {}, 'errors': errors or []}
 
 
-def capabilities(version: str = '2.1.0') -> dict[str, Any]:
+def capabilities(version: str = '2.2.0') -> dict[str, Any]:
     return {
         'framework': 'WCA', 'version': version, 'api_schema': API_SCHEMA,
         'target_types': list(SUPPORTED_TARGETS), 'assessment_modes': list(SUPPORTED_MODES),
@@ -87,7 +87,7 @@ def _verification_summary(result: dict) -> dict:
             'damaged_counts': {name: len(items) for name, items in result.get('damaged', {}).items()}}
 
 
-def _status(root: Path, current_version: str = '2.1.0') -> dict:
+def _status(root: Path, current_version: str = '2.2.0') -> dict:
     info = describe_assessment(root)
     data = {'kind': info.get('kind', 'unknown'), 'status': info.get('status', 'UNKNOWN'),
             'stage': info.get('stage', 'unknown'), 'recovery_action': info.get('action', 'NONE'),
@@ -154,7 +154,7 @@ def _require_verified(root: Path) -> AssessmentState:
     return state
 
 
-def _commit_review(root: Path, identifier: str, status: str, fingerprint: str, notes: str | None) -> dict:
+def _commit_review(root: Path, identifier: str, status: str, fingerprint: str, notes: str | None, client_notes: str | None = None) -> dict:
     # Exact state/evidence fingerprint is an optimistic concurrency token, not
     # an exploitability claim. Never invent a decision when evidence changes.
     state = _require_verified(root)
@@ -169,6 +169,12 @@ def _commit_review(root: Path, identifier: str, status: str, fingerprint: str, n
     with guarded_review_commit(root):
         from utils.reporting import AssessmentReporter
         updated = save_decision(root, identifier, status, item.get('notes', '') if notes is None else notes)
+        if client_notes is not None:
+            if not isinstance(client_notes, str) or len(client_notes) > 4000:
+                raise ValueError('Invalid client-facing review notes.')
+            from utils.guided_review import REVIEW_FILE, _atomic_json
+            updated['items'][identifier]['client_notes'] = sanitize_report_text(client_notes)
+            _atomic_json(root / REVIEW_FILE, updated)
         render_file = root / 'working' / 'report_render_state.json'
         render = json.loads(render_file.read_text(encoding='utf-8'))
         reporter = AssessmentReporter(root, state.data['assessment_name'],
@@ -192,7 +198,7 @@ def _commit_review(root: Path, identifier: str, status: str, fingerprint: str, n
 
 class BackendService:
     """Backend facade; local GUI adapter may call it after authorization checks."""
-    def __init__(self, *, version: str = '2.1.0'):
+    def __init__(self, *, version: str = '2.2.0'):
         self.version = version
 
     def execute(self, action: str, assessment_dir: str | Path | None = None, **kwargs) -> dict[str, Any]:
@@ -236,7 +242,7 @@ class BackendService:
                     updated = _commit_review(root, str(kwargs.get('candidate_id', '')),
                                              str(kwargs.get('disposition', '')),
                                              str(kwargs.get('fingerprint', '')),
-                                             kwargs.get('notes'))
+                                             kwargs.get('notes'), kwargs.get('client_notes'))
                 return envelope(True, 'OK', 'Review decision saved.', updated)
             if action == 'regenerate_reports':
                 if not kwargs.get('confirmed'):

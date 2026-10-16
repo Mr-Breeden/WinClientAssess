@@ -120,13 +120,14 @@ def generate_test_cases(assessment_dir: Path, mode="static", installer_suffix=""
         "",
         "Tracking Instructions:",
         "  This generated checklist is a reference, not authoritative review state.",
-        "  Record candidate dispositions, evidence references and notes through Guided Tester Review (--review).",
+        "  Complete applicable manual and linked WCR activities in GUI > Tester Workspace > Testing Queue.",
+        "  A WCR disposition does not automatically complete the associated manual test requirements.",
         "  Do not edit generated evidence to change its validation status; doing so fails integrity verification.",
         "",
         "Assessment-specific controlled PoC guidance:",
         "  See evidence_guide.txt for the exact WCR candidate commands and controlled demonstration procedures.",
-        "  See attack_surface_test_plan.txt for broad Windows thick-client attack-surface coverage, including GUIDED ONLY tests",
-        "  that require manual work and were not automatically observed. These tests are not automatically executed.",
+        "  attack_surface_test_plan.txt is optional methodology reference, not a second checklist. It includes tests",
+        "  that may need tester-directed validation; use one Testing Queue to track applicable work.",
         "",
     ]
 

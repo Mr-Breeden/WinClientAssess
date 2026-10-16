@@ -1,6 +1,10 @@
 # Windows Thick Client Attack Surface Coverage
 
-WCA uses a **vendor-neutral, extensible attack-surface methodology** for Windows thick-client testing. The categories in `attack_surface_test_plan.txt` are a structured checklist and guidance system, not a claim that every weakness can be automatically detected or that the current taxonomy is exhaustive.
+WCA uses a **vendor-neutral, extensible attack-surface methodology** for Windows thick-client testing. The categories in `attack_surface_test_plan.txt` provide a detailed optional reference used by the unified Testing Queue, not a claim that every weakness can be automatically detected or that the current taxonomy is exhaustive.
+
+## Tester workflow (v2.2.0)
+
+The **Testing Queue** is the single place to disposition WCR candidates and complete applicable TC procedures. Do not work through all 26 categories again after finishing the queue. The plan is an offline methodology reference; its suggested TC associations are navigation hints, not proof of completion. The GUI Evidence & Guidance page provides shorter, readable supplemental topic cards for scope-specific concerns. If a test is not represented in the queue, document scope-specific testing in the separate engagement testing record.
 
 ## Coverage states
 

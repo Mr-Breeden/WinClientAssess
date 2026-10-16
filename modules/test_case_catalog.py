@@ -181,7 +181,7 @@ TEST_CASES = [
             "risk": "Medium",
             "procedure": "Capture and review target-client file, registry, process, image-load, and access-denied activity during representative runtime workflows.",
             "how": [
-                "Run Windows Client Assessment in full mode and select the optional v0.3.0 Procmon/runtime capture when prompted, or use --runtime-capture.",
+                "Run Windows Client Assessment in Full mode and enable the optional Procmon capture, or start a separate Guided Runtime Observation after the assessment completes.",
                 "After Procmon starts, launch the target client and exercise representative authentication, configuration, update, file-open/save, and privileged workflows that are in scope.",
                 "Press Enter to stop the capture, then open procmon_summary.txt and the category files generated from the CSV trace.",
                 "Prioritize procmon_access_denied.txt, procmon_registry_writes.txt, procmon_file_writes.txt, procmon_process_activity.txt, and procmon_network_activity.txt for manual review.",
@@ -195,7 +195,7 @@ TEST_CASES = [
             "risk": "High",
             "procedure": "Use Process Monitor to identify missing DLL lookups and validate whether searched locations are writable.",
             "how": [
-                "If v0.4.0 runtime capture was used, open dll_search_review.txt and procmon_missing_dlls.txt first.",
+                "If Procmon or Guided Runtime evidence was collected, open dll_search_review.txt and procmon_missing_dlls.txt when those reports are available.",
                 "Review each POI-DL entry and confirm the searched directory permissions using Explorer, icacls, or AccessChk.",
                 "Open procmon_loaded_images.txt and runtime_loaded_dlls.txt to understand legitimate DLL load locations for the process.",
                 "If additional capture is needed, use Process Monitor filters for the target process, Result is NAME NOT FOUND/PATH NOT FOUND, and Path ending in .dll.",
