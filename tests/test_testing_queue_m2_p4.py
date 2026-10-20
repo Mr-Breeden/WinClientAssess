@@ -36,7 +36,7 @@ def test_evidence_guidance_is_not_a_second_checklist():
     assert "showWorkspacePane('queue');await loadTestingQueue()" in js
 
 def test_attack_surface_reference_has_queue_index_and_preserves_integrity(tmp_path):
-    root=assessment(tmp_path,version='2.2.0')
+    root=assessment(tmp_path,version='2.2.1')
     plan=artifact_path(root,'attack_surface_test_plan.txt').read_text(encoding='utf8')
     assert 'NOT A SECOND TESTING CHECKLIST' in plan
     assert 'QUICK INDEX' in plan

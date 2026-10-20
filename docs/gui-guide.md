@@ -1,4 +1,4 @@
-# WCA v2.2.0 — Local GUI guide
+# WCA v2.2.1 — Local GUI guide
 
 WCA v2.2.0 retains the Windows-local, offline browser GUI and accepted Full Assessment / Guided Runtime engine. M2-p4 full workflow and M2-p5 UAC elevation passed native Windows testing. RC1 tester startup and existing-assessment acceptance passed on Windows; no new collector or target-side action is added.
 
@@ -19,9 +19,9 @@ python .\wca.py --gui --port 9002
 
 The listener binds **only `127.0.0.1`**, never an external interface. `--port` only selects a local port; there is no `--host` or remote exposure option. Stop the listener with Ctrl+C in the terminal. There is no service installation, background daemon, automatic application launch, or external/cloud dependency. Leave the WCA terminal running while using the GUI. The WCA GUI requires an elevated Windows process; launching from standard PowerShell now requests Windows UAC approval **before** the local listener opens. If approved, the GUI starts in a **new elevated console**. If declined, it does not start. CLI Full mode and Guided Runtime retain Administrator checks; read-only and static CLI operations remain available unelevated.
 
-## v2.2.0 Tester Workspace
+## v2.2.1 Tester Workspace
 
-After collection, open **Tester Workspace**. Four primary panels are **Overview**, **Testing Queue**, **Evidence & Guidance**, and **Final Checklist**. The Testing Queue joins applicable manual cases and their linked WCR candidates into one activity, with all related WCR cards independently expandable and savable; unmatched WCR candidates remain separately listed. Manual Test Completion is visually separated from WCR dispositions. Supporting report previews are linked directly from activities. Evidence & Guidance offers optional reference material rather than a duplicate checklist. Tester decisions and notes are independently integrity-protected. See [Manual Testing Workflow](manual-testing-workflow.md).
+After collection, open **Tester Workspace**. The primary panels are **Overview**, **Testing Queue**, **Evidence & Guidance**, and **Final Checklist**. A conditional first panel, **1 · Runtime Observation**, appears for integrity-verified Full Assessments that have no successful Guided Runtime session. Start capture or explicitly skip in this browser before continuing; neither action runs automatically. The Testing Queue joins applicable manual cases and their linked WCR candidates into one activity, with all related WCR cards independently expandable and savable; unmatched WCR candidates remain separately listed. Manual Test Completion is visually separated from WCR dispositions. Supporting report previews are linked directly from activities. Evidence & Guidance offers optional reference material rather than a duplicate checklist. Tester decisions and notes are independently integrity-protected. See [Manual Testing Workflow](manual-testing-workflow.md).
 
 ## Workflow
 

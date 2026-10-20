@@ -14,7 +14,7 @@ def _update(root, status):
     doc=json.loads(p.read_text(encoding='utf-8'))
     doc['items']['WCR-DLL']['status']=status
     p.write_text(json.dumps(doc),encoding='utf-8')
-    create_manifest(root,framework_version='2.2.0',methodology_version='1.9',catalog_version='2.0')
+    create_manifest(root,framework_version='2.2.1',methodology_version='1.9',catalog_version='2.0')
 
 
 def test_completed_manual_keeps_pending_linked_candidate_in_remaining(tmp_path):

@@ -182,7 +182,7 @@ def test_packaging_and_html_security_contract():
     assert 'tool_paths.json' not in shipped
     script = Path('scripts/validate_windows.ps1').read_text(encoding='utf-8')
     assert "| Out-String).Trim()" in script
-    assert "WCA 2\\.2\\.0" in script
+    assert "WCA 2\\.2\\.1" in script
 
 
 def test_python_cli_preserves_no_gui_file_dialogs_flag():

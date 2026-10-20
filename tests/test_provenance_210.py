@@ -1,4 +1,4 @@
-"""v2.2.0: execution-backed provenance, redaction, lifecycle and export safety."""
+"""v2.2.1: execution-backed provenance, redaction, lifecycle and export safety."""
 from __future__ import annotations
 
 import json
@@ -144,9 +144,9 @@ def test_report_regeneration_does_not_invent_commands(tmp_path):
 def test_framework_version_and_catalog_are_current():
     import wca
     from utils.gui_server import make_server
-    assert wca.VERSION == '2.2.0'
+    assert wca.VERSION == '2.2.1'
     assert wca.ARTIFACT_CATALOG_VERSION == '2.0'
-    assert '2.2.0' in Path('scripts/validate_windows.ps1').read_text()
+    assert '2.2.1' in Path('scripts/validate_windows.ps1').read_text()
     assert 'collection_provenance.txt' in Path('utils/artifacts.py').read_text()
 
 

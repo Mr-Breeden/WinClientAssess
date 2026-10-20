@@ -1,4 +1,4 @@
-"""WCA v2.2.0 loopback-only GUI adapter.
+"""WCA v2.2.1 loopback-only GUI adapter.
 
 No new collectors. Mutations are delegated to the v1.9.6-derived BackendService
 or to private Python workers, where tester checkpoints are acknowledged in the browser.
@@ -267,7 +267,7 @@ def _validated_job_inputs(payload: dict) -> tuple[Path, list[str], str]:
 
 class JobManager:
     """One CLI worker per assessment; never launches a target or PoC itself."""
-    def __init__(self, version: str = '2.2.0', catalog: RecentAssessments | None = None):
+    def __init__(self, version: str = '2.2.1', catalog: RecentAssessments | None = None):
         self.catalog = catalog or RecentAssessments()
         self.version = version
         self.jobs: dict[str, dict] = {}
@@ -706,7 +706,7 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
     return GUIHandler
 
 
-def make_server(port: int = 9001, *, version: str = '2.2.0', jobs: JobManager | None = None,
+def make_server(port: int = 9001, *, version: str = '2.2.1', jobs: JobManager | None = None,
                 token: str | None = None, catalog: RecentAssessments | None = None) -> ThreadingHTTPServer:
     if not 0 <= port <= 65535:
         raise ValueError('Invalid port.')
@@ -728,7 +728,7 @@ def make_server(port: int = 9001, *, version: str = '2.2.0', jobs: JobManager | 
     return server
 
 
-def serve_gui(port: int = 9001, version: str = '2.2.0'):
+def serve_gui(port: int = 9001, version: str = '2.2.1'):
     server = make_server(port=port, version=version)
     url = f'http://127.0.0.1:{server.server_port}/#session={server.wca_token}'
     print(f'WCA v{version} private GUI session URL: {url}')

@@ -1,4 +1,4 @@
-"""v2.2.0 manual testing remains independent, persistent, private and integrity-safe."""
+"""v2.2.1 manual testing remains independent, persistent, private and integrity-safe."""
 from __future__ import annotations
 import json
 from pathlib import Path
@@ -10,7 +10,7 @@ from utils.assessment_integrity import create_manifest, verify_assessment
 from utils.manual_test_workflow import read_manual_workflow, read_manual_detail, save_manual_decision, REVIEW_FILE
 
 
-def fixture(tmp_path, version='2.2.0'):
+def fixture(tmp_path, version='2.2.1'):
     target = tmp_path / 'fixture.exe'; target.write_bytes(b'fixture')
     root = tmp_path / 'assessment'
     state = AssessmentState.create(root, assessment_name='Fixture', installer=target,
@@ -116,7 +116,7 @@ def test_manual_http_requires_auth_and_explicit_save(tmp_path):
     from tests.test_gui_200 import http_request, gui_headers
     root = fixture(tmp_path)
     jobs = JobManager(catalog=RecentAssessments(tmp_path/'private-list.json'))
-    server = make_server(port=0, version='2.2.0', jobs=jobs, token='known-test-token')
+    server = make_server(port=0, version='2.2.1', jobs=jobs, token='known-test-token')
     thread = threading.Thread(target=server.serve_forever, daemon=True);thread.start()
     try:
         url = '/api/manual-tests?' + urlencode({'assessment': str(root)})

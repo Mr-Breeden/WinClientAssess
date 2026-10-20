@@ -25,7 +25,7 @@ def test_final_checklist_export_is_integrity_gated_and_manual_is_not_autocomplet
 
 
 def test_client_appendix_explains_withheld_primary_evidence_without_exposing_name():
-    base = {'assessment_name': 'Lab', 'framework_version': '2.2.0', 'mode': 'full'}
+    base = {'assessment_name': 'Lab', 'framework_version': '2.2.1', 'mode': 'full'}
     items = [
         {'title': 'Allowed report', 'source_module': 'Network Surface Review',
          'status': 'VALIDATED', 'artifacts': ['network_surface_review.txt']},
