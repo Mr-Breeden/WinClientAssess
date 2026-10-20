@@ -1,3 +1,16 @@
+# WCA v2.2.1 — Optional Runtime Step in Tester Workspace
+
+Focused follow-up to the accepted v2.2.0 release baseline.
+
+- On a completed, integrity-PASS Full Assessment without any successful Guided Runtime session, Tester Workspace places **1 · Runtime Observation** before Overview and Testing Queue.
+- Presents a non-blocking recommendation with **Start Guided Runtime Observation** and **Skip for this assessment (this browser)**. Start uses the existing authorized tester-controlled worker, then transitions to its existing Overview monitoring/Stop controls.
+- A skipped recommendation is kept only in the local browser storage, not written to integrity-tracked assessment data or exported as test evidence. The Tester Workspace Overview allows returning to the optional step.
+- Successful Guided Runtime sessions suppress the recommendation. Failed/interrupted-only histories do not. Static and incomplete assessments do not display it. Earlier framework-version assessments remain readable but cannot start an incompatible capture.
+- No changes to runtime collection, test cases, WCR disposition, artifact catalog 2.0, integrity format, or Client Appendix content.
+- **Windows field acceptance is pending** for the new workspace controls. The v2.2.0 baseline was Windows-tested.
+
+---
+
 # WCA v2.2.0 — Production Release
 
 **Released:** October 16, 2026 · **Internal framework version:** `2.2.0` · **Previous published release:** v2.1.0.

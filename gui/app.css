@@ -118,3 +118,11 @@
 .supplemental-card{padding:16px;border:1px solid var(--border);border-radius:11px;background:var(--panelhi);font-size:12px;line-height:1.6}
 .supplemental-card h3{margin:0 0 9px;font-size:14px}.supplemental-card details{margin:10px 0}.supplemental-card summary,.workspace-methodology summary{cursor:pointer;font-weight:650}
 .workspace-methodology{margin-top:18px;padding:12px 16px;border:1px solid var(--border);border-radius:9px}
+
+/* Optional runtime step precedes review without changing assessment evidence. */
+.workspace-runtime-step{border-left:4px solid var(--accent)}
+.workspace-runtime-step .action-stack{margin-top:16px}
+.workspace-runtime-reminder{margin:14px 0;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--panelhi)}
+.workspace-runtime-reminder .button{margin-top:8px}
+#workspaceRuntimeTab:not([hidden]){border-color:var(--accent)}
+.workspace-tab[hidden],.workspace-runtime-reminder[hidden]{display:none!important}

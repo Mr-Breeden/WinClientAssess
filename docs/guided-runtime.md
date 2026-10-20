@@ -4,6 +4,10 @@ Guided Runtime Observation is a post-completion operation for a verified **full-
 
 WCA does not launch, authenticate to, update or otherwise exercise the target automatically.
 
+## Tester Workspace entry point (v2.2.1)
+
+After a verified Full Assessment, open **Tester Workspace**. When no successful Guided Runtime session is recorded, **1 · Runtime Observation** appears first, before Testing Queue and final reporting. **Start Guided Runtime Observation** uses the existing tester-controlled worker; **Skip for this assessment (this browser)** hides the recommendation locally and allows normal testing without modifying evidence, manifests, statuses or client exports. The Tester Workspace Overview provides an option to reconsider a skipped observation. If a successful session is already present, the step is omitted. Failed and incomplete sessions do not count as completed. Older framework-version assessments remain readable but runtime capture is blocked for version safety.
+
 ## Eligibility
 
 The assessment must be structured, full mode, completed, created by the active framework version, integrity-PASS, and have valid target/system-state evidence for runtime correlation. Both installable and portable targets are supported.

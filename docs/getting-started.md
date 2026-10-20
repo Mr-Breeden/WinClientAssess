@@ -1,4 +1,4 @@
-# WCA v2.2.0 — Getting Started
+# WCA v2.2.1 — Getting Started
 
 Start here for a concise walkthrough. For a new computer, follow [Clean Windows 11 VM Setup](windows-environment-setup.md) before these steps.
 

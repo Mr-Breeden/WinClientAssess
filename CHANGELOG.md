@@ -1,3 +1,10 @@
+## v2.2.1 — Guided Runtime recommendation in Tester Workspace
+
+- Added a conditional, first-in-order Runtime Observation workspace step for completed integrity-PASS Full Assessments without a successful Guided Runtime session.
+- Added explicit Start and optional browser-local Skip actions; skip can be reconsidered and never changes assessment evidence or creates a misleading completed-runtime state.
+- Preserved original Guided Runtime worker, target boundaries, integrity manifest, review state, and Client Appendix behavior.
+- Added regression coverage for workflow visibility and runtime-session completion semantics.
+
 # Changelog
 
 ## v2.2.0 — General Availability (2026-10-16)

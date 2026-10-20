@@ -238,7 +238,7 @@ def read_manual_detail(root: Path, case_id: str) -> dict:
 
 
 def save_manual_decision(root: Path, *, case_id: str, fingerprint: str, status: str,
-                         notes: str = '', evidence_reference: str = '', client_notes: str = '', current_version: str = '2.2.0') -> dict:
+                         notes: str = '', evidence_reference: str = '', client_notes: str = '', current_version: str = '2.2.1') -> dict:
     root = Path(root)
     if (not isinstance(notes, str) or len(notes) > MAX_INPUT or
             not isinstance(client_notes, str) or len(client_notes) > MAX_INPUT or

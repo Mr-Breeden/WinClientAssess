@@ -20,7 +20,7 @@ def test_case_links_require_actual_review_candidate_and_do_not_claim_completion(
         'WCR-NOTRELATED': {'id': 'WCR-NOTRELATED', 'title': 'Unrelated condition',
                            'test_cases': ['TC-IP-001'], 'status': 'VALIDATED'},
     }}), encoding='utf-8')
-    create_manifest(root, framework_version='2.2.0', methodology_version='1.9', catalog_version='2.0')
+    create_manifest(root, framework_version='2.2.1', methodology_version='1.9', catalog_version='2.0')
     summary = read_manual_workflow(root)
     dll = next(row for row in summary['items'] if row['id'] == 'TC-DL-001')
     service = next(row for row in summary['items'] if row['id'] == 'TC-SV-001')

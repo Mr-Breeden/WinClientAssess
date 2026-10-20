@@ -11,7 +11,7 @@ if (launchToken) {
 }
 const token = launchToken || sessionStorage.getItem('wcaGuiSessionToken') || '';
 const $ = id => document.getElementById(id);
-const state = {assessment: localStorage.getItem('wcaSelectedAssessment') || '', status: null, review: null, selectedReview: null, jobId: null, jobAssessment: null, jobKind: null, pollBusy: false, reviewCache: new Map(), reviewLoadedAt: 0, runtime: null, lastLog: null, captureWasActive: false, guideOpen: new Map(), manual: null, selectedManual: null, workspacePane: 'overview', manualOverview: null, activeQueue: null, jobStarting: false};
+const state = {assessment: localStorage.getItem('wcaSelectedAssessment') || '', status: null, review: null, selectedReview: null, jobId: null, jobAssessment: null, jobKind: null, pollBusy: false, reviewCache: new Map(), reviewLoadedAt: 0, runtime: null, lastLog: null, captureWasActive: false, guideOpen: new Map(), manual: null, selectedManual: null, workspacePane: 'overview', manualOverview: null, activeQueue: null, jobStarting: false, runtimeIntroAssessment: null};
 const notificationHistory = [];
 function notice(message, error = false) {
   // Routine successes and informational actions belong in their owning workspace,
@@ -76,13 +76,54 @@ function params(data){return new URLSearchParams(Object.entries(data).filter(([,
 async function backend(action,assessment = state.assessment){return request('/api/backend?'+params({action,assessment}));}
 function makeTable(columns, rows){const tbl=el('table',undefined,'table');const thead=el('thead');const hrow=el('tr');columns.forEach(name=>hrow.appendChild(el('th',name)));thead.appendChild(hrow);tbl.appendChild(thead);const body=el('tbody');rows.forEach(row=>{const tr=el('tr');row.forEach(cell=>{const td=el('td');if(cell instanceof Node)td.appendChild(cell);else td.textContent=String(cell??'—');tr.appendChild(td);});body.appendChild(tr);});tbl.appendChild(body);return tbl;}
 function replace(node,content){node.replaceChildren(content);}
+// Optional workspace preflight: a PASS Guided Runtime session is necessary to
+// claim observation completed. A local skip is an acknowledgement, not evidence.
+function runtimeObservationCompleted(){
+ return (state.runtime?.sessions||[]).some(session=>session.capture_status==='PASS');
+}
+function runtimeStepEligible(){
+ return state.assessment&&state.status?.status==='COMPLETED'&&state.status?.mode==='full'&&
+   state.status?.integrity?.status==='PASS'&&!runtimeObservationCompleted();
+}
+function runtimeSkipKey(){return 'wcaRuntimeObservationSkip:'+state.assessment;}
+function runtimeSkipped(){return !!state.assessment&&localStorage.getItem(runtimeSkipKey())==='yes';}
+function runtimeCanStart(){
+ return runtimeStepEligible()&&state.status.framework_version===bootstrap.version&&
+   !state.jobStarting&&!(state.jobId&&state.jobKind==='runtime'&&!state.jobFinished);
+}
+function updateRuntimeStep(){
+ const eligible=runtimeStepEligible(), skipped=runtimeSkipped();
+ const shouldShow=eligible&&!skipped;
+ $('workspaceRuntimeTab').hidden=!shouldShow;
+ $('workspaceRuntimeReminder').hidden=!eligible;
+ if(eligible){
+  const isCompatible=state.status.framework_version===bootstrap.version;
+  set('workspaceRuntimeBadge',state.runtime?.state||'NOT RUN');
+  $('workspaceRuntimeStart').disabled=!runtimeCanStart();
+  set('workspaceRuntimeReason',!isCompatible?
+   `Runtime capture requires an assessment created by WCA ${bootstrap.version}; this older assessment remains available for read-only review.`:
+   state.jobId&&state.jobKind==='runtime'&&!state.jobFinished?'Observation is active. Return to Overview to monitor or stop it.':
+   'No successful Guided Runtime session found in verified assessment history.');
+  set('workspaceRuntimeReminderText',skipped?
+   'Guided Runtime was skipped in this browser. No completed runtime observation is recorded. You may revisit it at any time.':
+   'Runtime observation is recommended before reviewing WCRs and completing manual test cases.');
+ }
+ if(!shouldShow&&state.workspacePane==='runtime')showWorkspacePane('overview');
+}
+function preferredWorkspacePane(){
+ if(runtimeStepEligible()&&!runtimeSkipped()&&state.runtimeIntroAssessment!==state.assessment){
+  state.runtimeIntroAssessment=state.assessment;
+  return 'runtime';
+ }
+ return state.workspacePane==='runtime'&&!runtimeStepEligible()?'overview':state.workspacePane;
+}
 function go(tab){
  const page=(tab==='review'||tab==='workflow')?'workspace':tab;
  document.querySelectorAll('.page').forEach(x=>x.classList.toggle('active',x.id==='page-'+page));
  document.querySelectorAll('.nav-link').forEach(x=>x.classList.toggle('active',x.dataset.tab===page));
  $('sectionLabel').textContent={dashboard:'Overview',new:'New assessment',workspace:'Tester Workspace',reports:'Reports',tools:'Tool readiness',management:'Assessment Management',help:'Help & About'}[page];
  if(page==='workspace'){
-  showWorkspacePane(tab==='review'||tab==='workflow'?'queue':state.workspacePane);
+  showWorkspacePane(tab==='review'||tab==='workflow'?'queue':preferredWorkspacePane());
  }
  if(page==='reports')loadReports();
  if(page==='tools')loadTools();
@@ -109,6 +150,7 @@ document.querySelectorAll('[data-workspace-target]').forEach(button=>button.addE
 $('workspaceRefresh').addEventListener('click',async()=>{if(!state.assessment)return notice('Select an assessment first.',true);
  await refresh();await loadReview();await loadManualTests();renderTestingQueue();renderWorkspaceSummary();});
 function renderWorkspaceSummary(){
+ updateRuntimeStep();
  const status=state.status||{};const manual=state.manual||state.manualOverview||{};const review=state.review||{};
  const queue=manual.testing_queue||{};
  const done=Math.max(0,(review.total||0)-(review.pending||0));
@@ -117,7 +159,7 @@ function renderWorkspaceSummary(){
   ['Testing activities',queue.total!==undefined?`${queue.resolved}/${queue.total} addressed`:'Open Testing Queue to load']];
  const holder=$('workspaceProgress');holder.replaceChildren();
  cards.forEach(([title,value])=>{const cell=el('div',undefined,'metric');cell.appendChild(el('span',title));cell.appendChild(el('strong',value));holder.appendChild(cell);});
- set('workspaceNext',status.status!=='COMPLETED'?'Complete evidence collection first.':reviewNext(manual,review,status));
+ set('workspaceNext',status.status!=='COMPLETED'?'Complete evidence collection first.':runtimeStepEligible()&&!runtimeSkipped()?'Recommended first: complete or explicitly skip Guided Runtime Observation before reviewing candidates.':reviewNext(manual,review,status));
  const checklist=$('workspaceFinalChecks');checklist.replaceChildren();
  for(const [label,detail] of [
   ['Collection',status.status==='COMPLETED'?'Completed; review coverage gaps':`Current state: ${status.status||'Unavailable'}`],
@@ -412,6 +454,21 @@ function updateNewModeOptions(){
 $('newMode').addEventListener('change',updateNewModeOptions);
 updateNewModeOptions();
 $('guidedRuntimeBtn').addEventListener('click',()=>startJob('runtime',{assessment:state.assessment}));
+$('workspaceRuntimeStart').addEventListener('click',()=>{
+ if(!runtimeCanStart())return;
+ startJob('runtime',{assessment:state.assessment});
+});
+$('workspaceRuntimeSkip').addEventListener('click',()=>{
+ if(!runtimeStepEligible())return;
+ localStorage.setItem(runtimeSkipKey(),'yes');
+ showWorkspacePane('overview');
+});
+$('workspaceRuntimeResume').addEventListener('click',()=>{
+ if(!runtimeStepEligible())return;
+ localStorage.removeItem(runtimeSkipKey());
+ showWorkspacePane('runtime');
+});
+
 $('resumeBtn').addEventListener('click',()=>startJob('resume',{assessment:state.assessment}));
 async function submitCheckpoint(id,answer){
  const buttons=$('jobChoices').querySelectorAll('button');buttons.forEach(b=>b.disabled=true);

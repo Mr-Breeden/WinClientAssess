@@ -144,7 +144,7 @@ def test_gui_launches_without_reprompt_if_admin(monkeypatch):
                            gui_preselected_options=False, port=9002, wca_elevation_attempted=False)
     monkeypatch.setattr(wca, 'parse_args', lambda: args)
     wca.main()
-    assert start == [{'port':9002, 'version': '2.2.0'}]
+    assert start == [{'port':9002, 'version': '2.2.1'}]
 
 
 def test_help_and_version_run_without_privilege_checks(tmp_path):
@@ -152,7 +152,7 @@ def test_help_and_version_run_without_privilege_checks(tmp_path):
     root = Path(__file__).resolve().parents[1]
     for arg in ('--version', '--help'):
         process = subprocess.run([sys.executable,str(root/'wca.py'),arg],cwd=root,capture_output=True,text=True,timeout=20)
-        assert process.returncode == 0 and (('2.2.0' in process.stdout) if arg=='--version' else ('--gui' in process.stdout))
+        assert process.returncode == 0 and (('2.2.1' in process.stdout) if arg=='--version' else ('--gui' in process.stdout))
 
 
 def _cli_args(mode):

@@ -32,7 +32,7 @@ def _fixture(tmp_path):
     source.write_bytes(b'MSI fixture')
     root = tmp_path / 'case'
     state = AssessmentState.create(root, assessment_name='Fixture', installer=source,
-                                   mode='full', framework_version='2.2.0', options={}, tools={})
+                                   mode='full', framework_version='2.2.1', options={}, tools={})
     state.mark_complete('COMPLETE_WITH_OPTIONAL_GAPS')
     reports = root / 'reports'
     (reports / 'installer_analysis.txt').write_text('Verified installer evidence', encoding='utf-8')
@@ -58,7 +58,7 @@ When NOT to Report:
 Procedure:
   Verify signature_review.txt if available.
 ''', encoding='utf-8')
-    create_manifest(root, framework_version='2.2.0', methodology_version='1.9', catalog_version='2.0')
+    create_manifest(root, framework_version='2.2.1', methodology_version='1.9', catalog_version='2.0')
     assert verify_assessment(root)['status'] == 'PASS'
     return root
 
@@ -86,7 +86,7 @@ def test_manual_case_links_do_not_expose_symlink_or_large_report(tmp_path):
     checklist = root / 'reports/test_cases.txt'
     checklist.write_text(checklist.read_text() + '\nHow to Perform:\n  Read private_link.txt and over_limit.txt.\n')
     (root / 'reports/over_limit.txt').write_bytes(b'X' * 500_001)
-    create_manifest(root, framework_version='2.2.0', methodology_version='1.9', catalog_version='2.0')
+    create_manifest(root, framework_version='2.2.1', methodology_version='1.9', catalog_version='2.0')
     assert verify_assessment(root)['status'] == 'PASS'
     assert 'over_limit.txt' not in read_manual_detail(root, 'TC-SG-001')['reports']
     # Assessment verification itself must reject any symlink before a report link is created.
@@ -140,7 +140,7 @@ def test_manual_http_links_are_authenticated_and_read_only(tmp_path):
     from utils.gui_server import JobManager, make_server
     root=_fixture(tmp_path)
     jobs=JobManager(catalog=RecentAssessments(tmp_path/'catalog.json'))
-    server=make_server(port=0, version='2.2.0',jobs=jobs,token='known-test-token')
+    server=make_server(port=0, version='2.2.1',jobs=jobs,token='known-test-token')
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         query=urlencode({'assessment':str(root)})

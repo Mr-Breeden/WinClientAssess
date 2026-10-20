@@ -34,14 +34,14 @@ def test_source_and_tester_tiers_preserve_runtime_and_poc_helpers():
 def test_rc1_packaging_archive_member_names_are_stable(tmp_path):
     source_zip, source_sha = release.build(tmp_path)
     tester_zip, tester_sha = release.build(tmp_path, tester=True)
-    assert source_zip.name == 'WCA-v2.2.0.zip'
-    assert tester_zip.name == 'WCA-v2.2.0-Tester.zip'
+    assert source_zip.name == 'WCA-v2.2.1.zip'
+    assert tester_zip.name == 'WCA-v2.2.1-Tester.zip'
     for path, hash_file in ((source_zip, source_sha), (tester_zip, tester_sha)):
         with zipfile.ZipFile(path) as archive:
             assert archive.testzip() is None
             names = archive.namelist()
             assert names
-            assert all(x.startswith('WCA-v2.2.0/') for x in names)
+            assert all(x.startswith('WCA-v2.2.1/') for x in names)
             assert not any('working/' in n or 'snapshot_pre.json' in n or '.venv' in n for n in names)
         assert path.name in hash_file.read_text()
 
@@ -49,7 +49,7 @@ def test_rc1_packaging_archive_member_names_are_stable(tmp_path):
 def test_rc1_docs_do_not_call_attack_surface_a_second_checklist():
     readme = (release.ROOT / 'README.md').read_text(encoding='utf-8')
     guide = (release.ROOT / 'docs' / 'manual-testing-workflow.md').read_text(encoding='utf-8')
-    assert 'WCA-v2.2.0-Tester.zip' in readme
+    assert 'WCA-v2.2.1-Tester.zip' in readme
     assert 'single Testing Queue' in readme or 'unified Testing Queue' in readme
     assert 'not another checklist' in guide
     assert 'ADDRESSED IN GUIDED REVIEW' in guide

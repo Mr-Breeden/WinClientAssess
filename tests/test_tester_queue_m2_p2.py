@@ -22,7 +22,7 @@ def _candidate_fixture(tmp_path, status='PENDING'):
             'WCR-NOCASE':{'id':'WCR-NOCASE','title':'Separate runtime condition',
                           'status':'PENDING', 'test_cases':[],
                           'notes':'SECRET-UNLINKED-REVIEW'}}}),encoding='utf-8')
-    create_manifest(root, framework_version='2.2.0', methodology_version='1.9',catalog_version='2.0')
+    create_manifest(root, framework_version='2.2.1', methodology_version='1.9',catalog_version='2.0')
     return root
 
 
@@ -49,7 +49,7 @@ def test_guided_coverage_requires_explicit_tester_confirmation(tmp_path):
     review_path=root/'working/tester_review_state.json'
     doc=json.loads(review_path.read_text());doc['items']['WCR-DLL']['status']='VALIDATED'
     review_path.write_text(json.dumps(doc),encoding='utf-8')
-    create_manifest(root,framework_version='2.2.0',methodology_version='1.9',catalog_version='2.0')
+    create_manifest(root,framework_version='2.2.1',methodology_version='1.9',catalog_version='2.0')
     # A Guided Review disposition alone never marks the manual case addressed.
     assert read_manual_detail(root,'TC-DL-001')['status']=='NOT STARTED'
     save_manual_decision(root,case_id=case['id'],fingerprint=case['fingerprint'],
@@ -64,7 +64,7 @@ def test_guided_coverage_requires_explicit_tester_confirmation(tmp_path):
     # A later candidate refresh or pending revalidation must reopen the activity.
     doc=json.loads(review_path.read_text());doc['items']['WCR-DLL']['status']='PENDING'
     review_path.write_text(json.dumps(doc),encoding='utf-8')
-    create_manifest(root,framework_version='2.2.0',methodology_version='1.9',catalog_version='2.0')
+    create_manifest(root,framework_version='2.2.1',methodology_version='1.9',catalog_version='2.0')
     assert read_manual_detail(root,'TC-DL-001')['status']=='NOT STARTED'
     assert activity_queue(root)['remaining']==3
 
@@ -76,7 +76,7 @@ def test_client_note_html_is_explicit_escaped_and_private_notes_excluded():
     manual=[{'id':'TC-NW-001','title':'Network test','status':'COMPLETED',
              'notes':'PRIVATE-MANUAL', 'evidence_reference':'CONFIDENTIAL-PATH',
              'client_notes':'Network service checked.'}]
-    html=_appendix_html({'assessment_name':'Fixture','framework_version':'2.2.0'},
+    html=_appendix_html({'assessment_name':'Fixture','framework_version':'2.2.1'},
                         items,['coverage_summary.txt'],{},manual_notes=manual)
     assert 'Approved &lt;b&gt;review&lt;/b&gt; &amp; context' in html
     assert 'Network service checked.' in html
@@ -142,7 +142,7 @@ def test_note_preview_api_requires_session_auth(tmp_path):
     save_manual_decision(root,case_id=case['id'],fingerprint=case['fingerprint'],
                          status='COMPLETED', notes='Internal private', client_notes='Approved scope note')
     jobs=JobManager(catalog=RecentAssessments(tmp_path/'catalog.json'))
-    server=make_server(port=0,version='2.2.0',jobs=jobs,token='test-session')
+    server=make_server(port=0,version='2.2.1',jobs=jobs,token='test-session')
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
     try:
         route='/api/client-notes?'+urlencode({'assessment':str(root)})

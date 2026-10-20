@@ -1,4 +1,4 @@
-# WCA v2.2.0 — Windows 11 Release Acceptance
+# WCA v2.2.1 — Windows 11 Release Acceptance
 
 **Two acceptance tracks:** existing assessment VM and fresh Windows 11 installation. Python tests and release packaging do not substitute for native Windows Procmon and GUI testing. Use only authorized/disposable test targets.
 

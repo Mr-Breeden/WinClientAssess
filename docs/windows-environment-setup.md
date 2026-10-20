@@ -1,4 +1,4 @@
-# WCA v2.2.0 — Clean Windows 11 Assessment VM Setup Guide
+# WCA v2.2.1 — Clean Windows 11 Assessment VM Setup Guide
 
 **Applies to:** WCA v2.2.0, Windows 11 x64, PowerShell, authorized thick-client security assessments  
 **Scope:** Preparation, tool installation, detection and validation. This guide ships with the WCA v2.2.0 source release.
