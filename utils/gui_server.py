@@ -1,4 +1,4 @@
-"""WCA v2.2.1 loopback-only GUI adapter.
+"""WCA v2.2.2 loopback-only GUI adapter.
 
 No new collectors. Mutations are delegated to the v1.9.6-derived BackendService
 or to private Python workers, where tester checkpoints are acknowledged in the browser.
@@ -267,7 +267,7 @@ def _validated_job_inputs(payload: dict) -> tuple[Path, list[str], str]:
 
 class JobManager:
     """One CLI worker per assessment; never launches a target or PoC itself."""
-    def __init__(self, version: str = '2.2.1', catalog: RecentAssessments | None = None):
+    def __init__(self, version: str = '2.2.2', catalog: RecentAssessments | None = None):
         self.catalog = catalog or RecentAssessments()
         self.version = version
         self.jobs: dict[str, dict] = {}
@@ -389,12 +389,21 @@ class JobManager:
             saved = AssessmentState.load(Path(job['assessment']))
             if saved:
                 stages = saved.data.get('stages') or {}
+                all_stages = list(stages.items())
+                # A completed static run never enters installation/snapshot/runtime
+                # phases. Display their eligibility without rewriting its sealed state.
+                static_skipped = {'pre_install_snapshot', 'installation_confirmation',
+                                  'post_install_snapshot', 'installed_state_analysis',
+                                  'runtime_optional', 'surface_optional'} if (
+                    saved.data.get('mode') == 'static' and saved.data.get('status') == 'COMPLETED') else set()
+                eligible = [(name, entry) for name, entry in all_stages if name not in static_skipped]
                 result['progress'] = {
                     'stage': str(saved.data.get('current_stage') or ''),
                     'status': str(saved.data.get('status') or ''),
-                    'completed': sum(1 for item in stages.values()
-                                     if isinstance(item, dict) and item.get('status') == 'COMPLETED'),
-                    'total': len(stages),
+                    'completed': sum(1 for name, entry in eligible
+                                     if isinstance(entry, dict) and entry.get('status') == 'COMPLETED'),
+                    'total': len(eligible),
+                    'not_applicable': len(all_stages) - len(eligible),
                     'message': sanitize_gui_text(saved.data.get('last_message'), 200),
                 }
         except (OSError, ValueError, TypeError):
@@ -450,6 +459,43 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
         if 'checkpoint has changed' in value or 'already sent' in value or 'no pending tester checkpoint' in value:
             code, message, guidance = ('CHECKPOINT_CHANGED', 'The pending checkpoint changed or was already answered.',
                                        'Refresh the active job before responding again.')
+        elif route == '/api/start' and isinstance(payload, dict) and payload.get('kind') == 'assessment' and 'assessment output already exists' in value:
+            code, message, guidance = ('ASSESSMENT_ALREADY_EXISTS',
+                                       'An assessment with this name already exists in the selected output folder.',
+                                       'Choose a different assessment name or open the existing assessment from Recent Assessments.')
+        elif route == '/api/start' and isinstance(payload, dict) and payload.get('kind') == 'assessment' and ('installer or target does not exist' in value or 'portable target must' in value):
+            code, message, guidance = ('TARGET_NOT_FOUND',
+                                       'The selected installer or application path is missing or unsupported.',
+                                       'Browse to an existing MSI, EXE, or supported portable application directory.')
+        elif route == '/api/start' and isinstance(payload, dict) and payload.get('kind') == 'assessment' and 'existing output parent directory' in value:
+            code, message, guidance = ('OUTPUT_DIRECTORY_INVALID',
+                                       'The selected assessment output folder does not exist or is not eligible.',
+                                       'Choose an existing writable parent folder for the new assessment.')
+        elif route == '/api/start' and isinstance(payload, dict) and payload.get('kind') == 'assessment' and 'assessment name must use' in value:
+            code, message, guidance = ('ASSESSMENT_NAME_INVALID',
+                                       'The assessment name contains unsupported characters or exceeds the allowed length.',
+                                       'Use letters, numbers, spaces, dots, underscores or hyphens (maximum 100 characters).')
+        elif route == '/api/start' and isinstance(payload, dict) and payload.get('kind') == 'assessment' and 'target and output directory are required' in value:
+            code, message, guidance = ('ASSESSMENT_INPUT_REQUIRED',
+                                       'Both a target and an assessment output folder are required.',
+                                       'Select the target and an existing output parent folder.')
+        elif route == '/api/tool-configuration' and isinstance(exc, ValueError):
+            if 'filename does not match' in value:
+                code, message, guidance = ('TOOL_EXECUTABLE_MISMATCH',
+                    'The selected executable does not match the tool name.',
+                    'Choose the supported executable for the selected tool.')
+            elif 'existing absolute executable file path' in value or 'supported executable or launcher' in value:
+                code, message, guidance = ('TOOL_EXECUTABLE_INVALID',
+                    'The tool path must identify an existing supported executable.',
+                    'Use Browse to select the executable itself, not its containing folder.')
+            elif 'configuration' in value:
+                code, message, guidance = ('TOOL_CONFIG_INVALID',
+                    'The local tool configuration could not be verified.',
+                    'Check tool_paths.json for malformed content, symbolic links or access problems.')
+            else:
+                code, message, guidance = ('TOOL_OVERRIDE_REJECTED',
+                    'The tool override could not be saved or verified.',
+                    'Confirm the selected executable path, then retry.')
         elif 'already active' in value:
             code, message, guidance = ('ASSESSMENT_BUSY', 'Another operation is active for this assessment.',
                                        'Open the Assessment Worker to inspect its progress.')
@@ -571,6 +617,10 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                     root = safe_assessment_root(query.get('assessment'))
                     self._json({'ok': True, 'history': runtime_history(root)})
                     return
+                if route == '/api/tool-configuration':
+                    from utils.tool_configuration import configured_tools
+                    self._json({'ok': True, 'tools': configured_tools()})
+                    return
                 if route == '/api/tool-versions':
                     from utils.tool_versions import detected_versions
                     self._json({'ok': True, 'tools': detected_versions()})
@@ -667,6 +717,13 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                     self._json({'ok': True, 'message': 'Manual test decision saved and integrity verified.',
                                 'data': saved})
                     return
+                if route == '/api/tool-configuration':
+                    if payload.get('confirmed') is not True:
+                        raise ValueError('Explicit tester confirmation required.')
+                    from utils.tool_configuration import configure_tool
+                    configure_tool(payload.get('name'), payload.get('path'))
+                    self._json({'ok': True, 'message': 'Tool configuration saved locally. Refresh Tool Readiness to verify detection.'})
+                    return
                 if route == '/api/select':
                     root = safe_assessment_root(payload.get('assessment'))
                     if AssessmentState.load(root) is None:
@@ -706,7 +763,7 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
     return GUIHandler
 
 
-def make_server(port: int = 9001, *, version: str = '2.2.1', jobs: JobManager | None = None,
+def make_server(port: int = 9001, *, version: str = '2.2.2', jobs: JobManager | None = None,
                 token: str | None = None, catalog: RecentAssessments | None = None) -> ThreadingHTTPServer:
     if not 0 <= port <= 65535:
         raise ValueError('Invalid port.')
@@ -728,7 +785,7 @@ def make_server(port: int = 9001, *, version: str = '2.2.1', jobs: JobManager | 
     return server
 
 
-def serve_gui(port: int = 9001, version: str = '2.2.1'):
+def serve_gui(port: int = 9001, version: str = '2.2.2'):
     server = make_server(port=port, version=version)
     url = f'http://127.0.0.1:{server.server_port}/#session={server.wca_token}'
     print(f'WCA v{version} private GUI session URL: {url}')

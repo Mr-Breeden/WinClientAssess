@@ -64,7 +64,7 @@ from utils.operation_lock import assessment_operation, AssessmentBusyError
 from utils.backend_service import BackendService
 from utils.elevation import is_administrator, launch_elevated, ElevationError
 
-VERSION = "2.2.1"
+VERSION = "2.2.2"
 METHODOLOGY_VERSION = "1.9"
 ARTIFACT_CATALOG_VERSION = "2.0"
 PRODUCT_SHORT = "WCA"

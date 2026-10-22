@@ -1,4 +1,4 @@
-# WCA v2.2.1 — Unified Tester Workspace
+# WCA v2.2.2 — Unified Tester Workspace
 
 One **Testing Queue** replaces the former sequence of separate Guided Review, Manual Test Cases and a second attack-surface checklist. WCA still preserves independent, integrity-protected candidate dispositions and manual case decisions; a candidate disposition **does not** automatically prove test completion or exploitability.
 
@@ -29,3 +29,7 @@ The native file/folder picker runs in a dedicated Python process, ensuring Tkint
 Each selected TC displays **all** related WCR candidates as independent collapsible cards, with pending candidates expanded by default. Candidate review controls appear inside each card; each WCR saves independently. A full-width **Manual Test Completion** heading separates those reviews from the TC's own procedure and status. The Overview and Final Checklist calculate outstanding work using both applicable manual requirements and pending WCR dispositions.
 
 Evidence & Guidance no longer offers `test_cases.txt` as a second tester workflow. The lengthy `attack_surface_test_plan.txt` remains an optional offline reference, while supplemental guidance cards display scope-dependent security testing themes and navigate back to the Testing Queue.
+
+## R2 report review and applicability
+
+Click a linked **Supporting reports** file to read it beneath the corresponding case or candidate. Use the built-in literal Find, Next and Previous controls to inspect matched lines with adjacent context; copy path/PowerShell searches are optional, never run by WCA. Excluded manual cases and their mode, evidence and prerequisite limitations appear in an expandable read-only explanation. These are not new queue activities or evidence of security defects.

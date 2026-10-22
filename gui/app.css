@@ -126,3 +126,24 @@
 .workspace-runtime-reminder .button{margin-top:8px}
 #workspaceRuntimeTab:not([hidden]){border-color:var(--accent)}
 .workspace-tab[hidden],.workspace-runtime-reminder[hidden]{display:none!important}
+
+/* R2 one active inline report reader: no jump to top, bounded previews. */
+.queue-report-inline{border:1px solid var(--accent);border-radius:10px;padding:13px;margin:14px 0;background:var(--panelhi);min-width:0}
+.queue-report-inline[hidden],.queue-report-results[hidden],.queue-exclusions[hidden],#queueReportShortcuts[hidden]{display:none!important}
+.queue-report-inline .manual-report-heading{justify-content:space-between;flex-wrap:wrap}
+.queue-report-actions,.queue-report-shortcuts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.queue-report-inline input[type=search]{width:100%;margin:8px 0 12px}
+.queue-report-results{border:1px solid var(--border);padding:12px;margin:12px 0;border-radius:8px}
+.queue-report-results .manual-report-content{max-height:180px}
+.queue-report-results .queue-report-actions{margin:10px 0}
+.queue-exclusions{margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:8px}
+.queue-exclusions summary{font-weight:650;cursor:pointer}
+.queue-excluded-item{padding:8px 0;border-bottom:1px solid var(--border)}
+.queue-excluded-item:last-child{border:0}
+
+.staging-location-warning{border-left:4px solid var(--accent)}
+
+/* R3: compact, persistent report integrity notice; no modal or interruption. */
+.queue-report-integrity{font-size:11px;line-height:1.65;color:#aabbd0;background:#17283a;border-left:3px solid var(--warn);padding:10px 13px;border-radius:4px;margin:12px 0}
+.queue-report-integrity strong{color:#f2d49e}
+#queueReportSearchHint{margin:0 0 11px}

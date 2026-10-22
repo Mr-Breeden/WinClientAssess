@@ -1,6 +1,6 @@
-# WCA v2.2.1 — Local GUI guide
+# WCA v2.2.2 — Local GUI guide
 
-WCA v2.2.0 retains the Windows-local, offline browser GUI and accepted Full Assessment / Guided Runtime engine. M2-p4 full workflow and M2-p5 UAC elevation passed native Windows testing. RC1 tester startup and existing-assessment acceptance passed on Windows; no new collector or target-side action is added.
+WCA v2.2.2 retains the Windows-local, offline browser GUI and tester-controlled Full Assessment / Guided Runtime engine. Windows field testing covered R1 Full/Guided Runtime/export, R2 Static/Tool Readiness and R3 report-viewer controls. No new collector or automated target-side action was introduced for the final production promotion.
 
 ## Launch
 
@@ -19,7 +19,7 @@ python .\wca.py --gui --port 9002
 
 The listener binds **only `127.0.0.1`**, never an external interface. `--port` only selects a local port; there is no `--host` or remote exposure option. Stop the listener with Ctrl+C in the terminal. There is no service installation, background daemon, automatic application launch, or external/cloud dependency. Leave the WCA terminal running while using the GUI. The WCA GUI requires an elevated Windows process; launching from standard PowerShell now requests Windows UAC approval **before** the local listener opens. If approved, the GUI starts in a **new elevated console**. If declined, it does not start. CLI Full mode and Guided Runtime retain Administrator checks; read-only and static CLI operations remain available unelevated.
 
-## v2.2.1 Tester Workspace
+## v2.2.2 Tester Workspace
 
 After collection, open **Tester Workspace**. The primary panels are **Overview**, **Testing Queue**, **Evidence & Guidance**, and **Final Checklist**. A conditional first panel, **1 · Runtime Observation**, appears for integrity-verified Full Assessments that have no successful Guided Runtime session. Start capture or explicitly skip in this browser before continuing; neither action runs automatically. The Testing Queue joins applicable manual cases and their linked WCR candidates into one activity, with all related WCR cards independently expandable and savable; unmatched WCR candidates remain separately listed. Manual Test Completion is visually separated from WCR dispositions. Supporting report previews are linked directly from activities. Evidence & Guidance offers optional reference material rather than a duplicate checklist. Tester decisions and notes are independently integrity-protected. See [Manual Testing Workflow](manual-testing-workflow.md).
 
@@ -27,12 +27,20 @@ After collection, open **Tester Workspace**. The primary panels are **Overview**
 
 1. **Overview:** Enter or browse to an existing completed assessment directory. Saved selection remains in *this browser's* local storage; **Recent Assessments** also remembers explicitly opened projects in a tester-local file outside assessment evidence. Discovery is limited to previously selected output parents and is bounded. Its summaries do not replace integrity verification. View lifecycle checkpoints, coverage, integrity and review counts. Read-only refresh is allowed for earlier completed assessments.
 2. **New assessment:** Select MSI/EXE or portable application, output folder and mode; press Start. The browser launches the original WCA engine in a private background worker, **not a PowerShell window**. Observe log/checkpoint progress and use the explicit Continue button once you have manually installed/launched/exercised the target. The new-assessment checkboxes preselect optional runtime/network choices; manual installation/activity and Procmon Stop remain explicit browser checkpoints. WCA requests elevation at GUI launch, before full-mode collectors are available. Same-version interrupted assessments alone may be eligible for resume.
-3. **Guided Runtime:** For an intact completed v2.2.0 full assessment, click Start Guided Runtime. The dedicated **Guided Runtime Observation** panel displays Starting, Capturing, Processing and completion/failure states plus target process/connection counts, trace growth and final integrity. Perform tester-controlled target activity and press **Stop capture** when finished. Neither target applications nor PoCs are launched by WCA. Completed observation session history is loaded from integrity-verified `working/guided_runtime_observations.json` after restarting the GUI, without initiating a new capture.
+3. **Guided Runtime:** For an intact completed **same-version** Full assessment, click Start Guided Runtime from the optional Tester Workspace step or Overview. The dedicated **Guided Runtime Observation** panel displays Starting, Capturing, Processing and completion/failure states plus target process/connection counts, trace growth and final integrity. Perform tester-controlled target activity and press **Stop capture** when finished. Neither target applications nor PoCs are launched by WCA. Completed observation session history is loaded from integrity-verified `working/guided_runtime_observations.json` after restarting the GUI, without initiating a new capture.
 4. **Tester Workspace > Testing Queue:** Select an activity in Remaining, Pending Guided Review, Pending Manual Testing, Addressed or All. For cases with linked candidates, all WCRs appear in separate expandable cards, including the original ten-section validation guides. Each WCR disposition and notes save independently; the manual test status remains separate. All applicable work must be addressed before the activity leaves Remaining. Candidate VALIDATED is not proof of exploitability; saves verify assessment integrity and the evidence fingerprint. The candidate-only activities are also in the same queue.
 5. **Reports:** Browse bounded, sanitized, human-readable `.txt`, `.md` and `.html` artifacts from the selected assessment's `reports` directory. The preview renders report contents strictly as **plain text**; HTML/JavaScript from assessment files is not executed within the GUI. Use the existing standalone `assessment_report.html` in a trusted offline viewer when interactive dashboard features are needed.
 6. **Client Appendix:** Available only when assessment integrity is PASS and required review is completed. Explicitly confirm a separate ZIP output path **outside** the assessment. Backend export includes its existing sanitization, integrity and evidence-selection gates. No unsanitized working files or raw capture are sent to the browser.
 7. **Assessment Management:** Open the dedicated sidebar tab to run fresh integrity verification, see safe checkpoint resume options, and explicitly regenerate only eligible derived reports when the verified state marks that action repairable. Explanations identify why buttons are disabled. Never force recovery for damaged source evidence.
 8. **Help & About:** Read offline Getting Started, Windows VM Setup, Optional Tools and GUI guides; inspect WCA/framework/CLI version information, Python version and detected external executable file versions where they can be verified without executing a program.
+
+## Current v2.2.2 report preview and tool setup
+
+- **Tool readiness:** Missing supported executables can be configured with **Configure tool location → Browse → Save and verify**. Overrides are stored only in the workstation-local `tool_paths.json`; the UI confirms actual detection and preserves other overrides. Clearing an override restores automatic discovery. WCA does not download, install or execute the selected tools when configuring paths.
+- **Testing Queue supporting reports:** Open a report from its activity to display a **read-only inline preview beneath the selected link**; the page does not jump to the top. Find/Next/Previous navigate matching lines locally. **Copy report path** copies the actual selected assessment report location. **Copy PowerShell search** is disabled until a nonempty search term is entered; it copies an optional literal, read-only `Select-String` command and never launches Notepad. MSI custom-action/sequence shortcuts prepopulate search terms.
+- **Integrity-protected evidence:** Preview, search and copy do not alter reports. A persistent warning explains that saving edits to an original protected file can invalidate SHA-256 assessment integrity; testers needing edits should work on separate copies. WCA never silently re-hashes externally modified reports.
+- **Assessment-start validation:** Wrong target type, missing/unsupported file and existing assessment names are rejected. Current safe notifications explain known errors without exposing a tester's full local paths. Choose **Installable MSI/EXE** for `.msi` installers; **Portable EXE / application folder** is not the MSI workflow.
+- **Static progress:** completed applicable stages are counted separately from not-applicable stages; this display does not change collected evidence.
 
 ## Performance and worker-log behavior
 
@@ -46,7 +54,7 @@ Worker output uses one persistent scroll area. If the tester is reading the late
 - Workers are launched as Python subprocesses with CREATE_NO_WINDOW on Windows, without arbitrary shell interpolation or a second terminal. The browser confirms checkpoints through validated JSON responses, and the worker blocks until they are acknowledged. Reloading the browser restores the job ID; stopping the server does not constitute a clean worker completion and may leave a paused/failed assessment. Do not shut down your VM during critical collection.
 - The first GUI requires paths to existing files/directories. Native Windows path pickers are available where supported, with text entry as a fallback. The browser's own file input cannot reveal local filesystem paths for security reasons.
 
-## GUI acceptance — Windows 11
+## GUI acceptance — Windows 11 (current v2.2.2)
 
 Run `./install_dependencies.ps1 -TestDependencies` and `./scripts/validate_windows.ps1`; validate the Python GUI HTTP tests in the regression suite. Then:
 
@@ -57,7 +65,7 @@ Run `./install_dependencies.ps1 -TestDependencies` and `./scripts/validate_windo
 5. Run one small static and one full GUI assessment on authorized fixtures. Confirm no additional PowerShell window opens, browser checkpoints wait for explicit tester action, snapshot and module statuses update, and final integrity passes. Run one Guided Runtime browser capture, stop it with the button, and check sanitized evidence and no retained full-host PML/CSV. Refresh the page at a checkpoint and verify that it reconnects to the same running job. Do not run any PoC automatically.
 6. Confirm forbidden Host/Origin requests, missing tokens, report traversal and cross-site POSTs fail; test selected-assessment reload and GUI close/reopen. Confirm release package excludes `tool_paths.json` and any generated GUI logs.
 
-**Compatibility:** v1.9.2 and subsequent completed assessments remain readable without migration. Interrupted assessments from a different release must not be silently resumed. The v1.9.6 CLI is the accepted reference until the v2.2.0 GUI passes this native acceptance checklist.
+**Compatibility:** v1.9.2 and subsequent completed assessments remain readable without migration. Interrupted assessments from a different release must not be silently resumed. The current v2.2.2 GUI uses the accepted unified Testing Queue. Historical milestone-specific tab layouts should not be used as current acceptance criteria.
 
 ## Interrupted review-save and integrity failures
 
@@ -97,3 +105,7 @@ Use **Testing Queue** as the single remaining-activity list after assessment col
 ### M2-p4 Testing Queue and references
 
 Selecting a manual activity presents all linked WCR candidates in their own expandable cards, with pending reviews expanded. Save each WCR independently. The **Manual Test Completion** heading marks the separate TC-level procedure and status. Completing a TC does not hide pending WCR candidates. Evidence & Guidance is now a reference view with supplemental, scope-dependent testing cards and collection/provenance shortcuts; it does not add a second checklist. The detailed attack-surface plan remains available as an optional reference.
+
+## R2 error handling and report reader
+
+New Assessment gives safe rejection reasons for existing output directories, invalid names, missing targets and missing output parents. The selected target's user-profile location triggers a non-blocking staging advisory. In the Testing Queue, Supporting reports open next to their reference; use literal in-report search with match navigation. Copy report path is always available for verified reports; Copy PowerShell search requires a nonempty literal in-report search term and copies a read-only `Select-String` command. A persistent integrity notice reminds testers not to save edits to the original report; copy it elsewhere first. Older-version assessments remain read-only.

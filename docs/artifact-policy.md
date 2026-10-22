@@ -1,6 +1,6 @@
 # WCA artifact policy
 
-**Current artifact catalog:** 2.0 (framework v2.2.0; historical 1.8 changes documented below)
+**Current artifact catalog:** 2.0 (framework v2.2.2; historical 1.8 changes documented below)
 
 WCA keeps an artifact only when it has a distinct tester, evidence, correlation, integrity, recovery or reproducibility purpose.
 

@@ -1,4 +1,4 @@
-"""WCA v2.2.1 in-process backend contract for future local GUI adapters.
+"""WCA v2.2.2 in-process backend contract for future local GUI adapters.
 
 The loopback GUI adapter is separate; no target launch or automatic PoC invocation.
 The JSON-safe envelopes intentionally exclude raw manifest paths, secrets,
@@ -41,7 +41,7 @@ def envelope(ok: bool, code: str, message: str, data: dict | None = None,
             'data': data if data is not None else {}, 'errors': errors or []}
 
 
-def capabilities(version: str = '2.2.1') -> dict[str, Any]:
+def capabilities(version: str = '2.2.2') -> dict[str, Any]:
     return {
         'framework': 'WCA', 'version': version, 'api_schema': API_SCHEMA,
         'target_types': list(SUPPORTED_TARGETS), 'assessment_modes': list(SUPPORTED_MODES),
@@ -87,7 +87,7 @@ def _verification_summary(result: dict) -> dict:
             'damaged_counts': {name: len(items) for name, items in result.get('damaged', {}).items()}}
 
 
-def _status(root: Path, current_version: str = '2.2.1') -> dict:
+def _status(root: Path, current_version: str = '2.2.2') -> dict:
     info = describe_assessment(root)
     data = {'kind': info.get('kind', 'unknown'), 'status': info.get('status', 'UNKNOWN'),
             'stage': info.get('stage', 'unknown'), 'recovery_action': info.get('action', 'NONE'),
@@ -198,7 +198,7 @@ def _commit_review(root: Path, identifier: str, status: str, fingerprint: str, n
 
 class BackendService:
     """Backend facade; local GUI adapter may call it after authorization checks."""
-    def __init__(self, *, version: str = '2.2.1'):
+    def __init__(self, *, version: str = '2.2.2'):
         self.version = version
 
     def execute(self, action: str, assessment_dir: str | Path | None = None, **kwargs) -> dict[str, Any]:

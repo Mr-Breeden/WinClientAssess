@@ -1,7 +1,7 @@
 # External Tool Installation Guide — Windows 11
 
-**Windows Client Assessment v2.2.0**  
-**Official-source links last reviewed:** 2026-08-24
+**Windows Client Assessment v2.2.2**  
+**Documentation reference date:** 2026-10-21 (verify upstream installer versions and requirements before downloading)
 
 Windows Client Assessment categorizes external tools by both **dependency level** and **usage**. A tool can be useful even when the framework does not invoke it automatically.
 
@@ -13,6 +13,8 @@ Usage classifications:
 - `MANUAL` — companion tester tool, not automatically invoked.
 
 For each tool below, the guide covers purpose, status, installation, privileges/PATH, verification, detection/override, consuming modules, and missing-tool behavior.
+
+For first-time testers, use **GUI → Tool readiness → Configure tool location** to browse, verify, save or remove an executable override; manual JSON editing below remains supported. Missing optional/manual tools do not block WCA assessment. Detection is not a claim that all testing is complete.
 
 ## Quick support matrix
 

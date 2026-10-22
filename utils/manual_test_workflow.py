@@ -217,9 +217,32 @@ def testing_queue(root: Path, *, verified: bool = True, manual: dict | None = No
             'pending_manual_testing': sum(not x['manual_complete'] for x in activities),
             'items': activities}
 
+def _excluded_case_explanations(root: Path) -> list[dict]:
+    """Summarize only safe case IDs/titles and eligibility reasons from sealed evidence.
+
+    Older assessments lacking this section return an empty array rather than
+    guessing why cases are absent or rewriting historical reports.
+    """
+    report = root / 'reports' / 'test_cases.txt'
+    text = report.read_text(encoding='utf-8', errors='replace')
+    marker = 'EXCLUDED TEST CASES — APPLICABILITY EXPLANATIONS'
+    if marker not in text:
+        return []
+    section = text.split(marker, 1)[1].split('APPLICABLE MANUAL TEST CASES', 1)[0]
+    result = []
+    for line in section.splitlines():
+        item = re.match(r'^  (TC-[A-Z]{2}-\d{3}) — (.{1,160})$', line)
+        if item:
+            result.append({'id': item.group(1), 'title': sanitize_report_text(item.group(2))[:160], 'reasons': []})
+        elif result and line.startswith('    - '):
+            result[-1]['reasons'].append(sanitize_report_text(line[6:])[:500])
+    return result[:50]
+
+
 def read_manual_workflow(root: Path) -> dict:
     """Return minimal listing; private notes are available only per selected case."""
     overview = _snapshot(Path(root))
+    overview['excluded_cases'] = _excluded_case_explanations(Path(root))
     overview['testing_queue'] = testing_queue(root, verified=False, manual=overview)
     for item in overview['items']:
         item.pop('notes', None)
@@ -238,7 +261,7 @@ def read_manual_detail(root: Path, case_id: str) -> dict:
 
 
 def save_manual_decision(root: Path, *, case_id: str, fingerprint: str, status: str,
-                         notes: str = '', evidence_reference: str = '', client_notes: str = '', current_version: str = '2.2.1') -> dict:
+                         notes: str = '', evidence_reference: str = '', client_notes: str = '', current_version: str = '2.2.2') -> dict:
     root = Path(root)
     if (not isinstance(notes, str) or len(notes) > MAX_INPUT or
             not isinstance(client_notes, str) or len(client_notes) > MAX_INPUT or
