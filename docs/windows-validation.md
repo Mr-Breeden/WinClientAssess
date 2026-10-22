@@ -1,10 +1,10 @@
-# WCA v2.2.1 — Windows 11 Release Acceptance
+# WCA v2.2.2 — Windows 11 Release Acceptance
 
-**Two acceptance tracks:** existing assessment VM and fresh Windows 11 installation. Python tests and release packaging do not substitute for native Windows Procmon and GUI testing. Use only authorized/disposable test targets.
+**Two acceptance tracks:** existing assessment VM and fresh Windows 11 installation. Python tests and release packaging do not substitute for native Windows Procmon and GUI testing. Use only authorized/disposable test targets. Sections explicitly marked Historical record earlier release processes and must not be used to validate the current Tester Workspace.
 
 ## A. Existing Windows assessment VM — targeted regression
 
-Extract the complete **WCA v2.2.0 GitHub source distribution** (which includes `tests/`, `requirements-dev.txt`, and `scripts/validate_windows.ps1`) into a **new** folder. The slim tester release asset intentionally omits these release-validation components. Copy local `tool_paths.json` only when needed, open Windows PowerShell, then:
+Extract the complete **WCA v2.2.2 source distribution** (which includes `tests/`, `requirements-dev.txt`, and `scripts/validate_windows.ps1`) into a **new** folder. The slim tester release asset intentionally omits these release-validation components. Copy local `tool_paths.json` only when needed, open Windows PowerShell, then:
 
 ```powershell
 .\install_dependencies.ps1 -TestDependencies
@@ -14,11 +14,14 @@ python .\wca.py --backend-action tool_readiness --backend-format text
 python .\wca.py --gui
 ```
 
-Expected: all included tests PASS or documented skips only; packaging audit PASS; **WCA 2.2.0** recognized; no version mismatch. The local `tool_paths.json` may exist on the VM but must not be present in the distributable ZIP.
+Expected: all included tests PASS or documented skips only; packaging audit PASS; **WCA 2.2.2** recognized; no version mismatch. The local `tool_paths.json` may exist on the VM but must not be present in the distributable ZIP.
 
-- **GUI checks:** Overview/Recent Assessments switching, Browse, checkbox dimensions and option state in both Static/Full modes, all sidebar tabs, Help & About offline documentation, worker progress/scroll position, browser reload/reattachment, and Assessment Management availability explanations.
+- **GUI checks:** Overview/Recent Assessments, browse/pickers, Static/Full option state, all current Tester Workspace panels, worker progress and Assessment Management. Confirm **Tool readiness** accepts and persists a lowercase-name override such as `lessmsi`, and Clear restores detection.
+- **R3 report viewer:** In a verified Static MSI assessment, open `TC-IN-001 → installer_analysis.txt` beneath its Supporting reports link. Confirm the integrity warning, in-report Find/Next/Previous, disabled PowerShell search with empty input, enabled copy after a search term, correct literal `Select-String` command without launching an editor, and unchanged integrity. Confirm MSI custom-action search works in `TC-MS-001 → msi_analysis.txt`.
+- **Assessment-start errors:** Reject a duplicate assessment name with `ASSESSMENT_ALREADY_EXISTS` and safe guidance; select **Installable MSI/EXE** for MSI, not Portable. Confirm valid installer starts.
+- **Static progress:** completed static stages display as applicable and skipped runtime stages as not applicable, with final integrity PASS.
 - **Review and evidence:** confirm ten-section validation guides, multiple sections opened together, optional notes retained, no repeated browser confirmation, and manifest integrity PASS after explicit save.
-- **Runtime regression:** complete a new Full assessment in v2.2.0 (or reuse an intact same-version Full assessment). Start Guided Runtime, confirm **CAPTURING** only when Procmon is ready, manually exercise the approved client, press **Stop Guided Runtime Observation**, and wait for **PROCESSING** and completion. Confirm nonzero target-scoped events for a genuinely active target, useful correlations, no capture-controller exception, fresh review candidates, no raw full-host PML retention, and integrity PASS. Comparable candidate counts depend on comparable exercised workflows.
+- **Runtime regression:** complete a new Full assessment in v2.2.2 (or reuse an intact same-version Full assessment). Start Guided Runtime, confirm **CAPTURING** only when Procmon is ready, manually exercise the approved client, press **Stop Guided Runtime Observation**, and wait for **PROCESSING** and completion. Confirm nonzero target-scoped events for a genuinely active target, useful correlations, no capture-controller exception, fresh review candidates, no raw full-host PML retention, and integrity PASS. Comparable candidate counts depend on comparable exercised workflows.
 - **ACL attribution:** if pre/post snapshots contain changes from another unrelated updater, verify `permissions_review.txt` excludes its file trees from automatic target ACL queries when high-confidence target ownership roots are known. Confirm target services, tasks and DLL-correlated external directories remain. The full installation differential must remain available for examination. The output reports scoped/omitted path counts and processing limit.
 - **Client Appendix:** only explicitly export a completed, reviewed and integrity-verified assessment. Check ZIP inventory, checksums, privacy sanitization, relative links, and that source manifest hashes did not change.
 
@@ -47,13 +50,13 @@ Expect manifest unchanged. Separate Client Appendix export is always an explicit
 
 ## Acceptance criteria
 
-Full end-to-end **Windows release acceptance** requires regression tests, native GUI/Procmon functional evidence, privacy/integrity/export checks and a clean-VM walkthrough. WCA v2.1.0 was the previous published baseline. M2-p4 native Windows full functional testing, M2-p5 native UAC checks, and v2.2.0-RC1 tester-distribution GUI/assessment-access smoke passed. Previous releases remain available for rollback.
+Full end-to-end **Windows release acceptance** requires regression tests, native GUI/Procmon functional evidence, privacy/integrity/export checks and a clean-VM walkthrough. The preceding production baseline was v2.2.1. R1 Windows DarkRelay Full/Guided Runtime/export, R2 Windows Static MSI/Tool Readiness, and R3 cross-version read-only report-viewer tests passed. The final v2.2.2 distributions still require a clean-extraction Windows smoke test; previous releases remain available for rollback.
 
-## Corrected v2.2.0 acceptance checks
+## Current v2.2.2 release smoke checks
 
-The corrected ZIP preserves `WCA 2.2.0` as the framework version. Run the complete Windows suite, then exercise browser-controlled Guided Runtime on an intact same-version Full assessment. Confirm **Stop Guided Runtime Observation** appears after Procmon starts, telemetry updates are visible when available, capture continues despite a transient GUI telemetry warning, and the final report contains real target events and refreshed Guided Review conditions. Optional live-statistics failure must never be treated as an authoritative capture failure. Also verify Notifications can be dismissed and show action, safe code, outcome and next step. Running pytest should not add fake `case` assessments to Recent Assessments.
+The production ZIP must report `WCA 2.2.2` as the framework version. Run the complete Windows suite, then exercise browser-controlled Guided Runtime on an intact same-version Full assessment. Confirm **Stop Guided Runtime Observation** appears after Procmon starts, telemetry updates are visible when available, capture continues despite a transient GUI telemetry warning, and the final report contains real target events and refreshed Guided Review conditions. Optional live-statistics failure must never be treated as an authoritative capture failure. Also verify Notifications can be dismissed and show action, safe code, outcome and next step. Running pytest should not add fake `case` assessments to Recent Assessments.
 
-## v2.2.0 provenance acceptance
+## Provenance acceptance (introduced v2.1.0, retained in v2.2.2)
 
 After a new assessment, verify `reports/collection_provenance.txt` exists, relevant `.txt` reports reference matching stable `PROV-xxxxx` IDs, recorded Procmon commands reflect actual execution, and skipped modules do not claim completed invocations. Review the report for tester profile names, target installer source paths, credentials and raw PowerShell bodies (none should appear). Run a supplemental Guided Runtime session and confirm IDs remain stable and the manifest still verifies. Review-only changes should not add execution events. Confirm the Client Appendix includes only sanitized `collection_provenance.txt`, not the working JSON. **Accepted baseline (October 15, 2026):** WCA v2.1.0 passed Windows automated validation (427/427) and release audit; its full-mode assessment, provenance evidence, integrity state, and Client Appendix were reviewed. WCA v2.2.0 production promotion uses the accepted M2-p4 Full/Guided Runtime/review/export, M2-p5 UAC and RC1 tester-package GUI acceptance. Continue clean-VM tool checks for new environments.
 
@@ -76,7 +79,7 @@ After a new assessment, verify `reports/collection_provenance.txt` exists, relev
   supported regeneration action. Existing completed assessments must not be
   edited in place outside WCA's integrity-safe lifecycle.
 
-## Historical v2.2.0 Tester Workflow acceptance (M1; superseded by Testing Queue)
+## Historical v2.2.0 Tester Workflow acceptance (M1; superseded by unified Testing Queue)
 
 1. Begin a fresh current-version Full assessment, complete tester-controlled runtime collection, and verify integrity.
 2. Open Tester Workspace > Manual Test Cases; verify manual cases equal the applicable `test_cases.txt` entries. Filter by ID/title, status and category. Select TC-IN-001, review inline instructions and use its actual supporting-report buttons; confirm reports open in place without navigating to Reports. Confirm unavailable reports have no clickable link.
@@ -92,7 +95,7 @@ After a new assessment, verify `reports/collection_provenance.txt` exists, relev
 
 Passing unit tests on Linux is not a substitute for these native Windows acceptance checks.
 
-## Historical v2.2.0-M2 navigation acceptance (superseded by M2-p4)
+## Historical v2.2.0-M2 navigation acceptance (superseded by M2-p4; NOT current workflow)
 
 Confirm the single Tester Workspace navigation contains Overview, Guided Review, Manual Test Cases, Evidence & Guidance, and Final Checklist. Switch between tabs without clearing unsaved notes, and verify the legacy ten-section review guide still saves dispositions independently from manual case status. Check case filtering by ID/title/report, status, and category; selection of TC-IN-001 should link only existing verified installer reports, with an in-workspace read-only preview. Confirm no unintended assessment mutation occurs from filtering or opening reports. Test persistence after reload, integrity PASS after explicit saves, and legacy v2.1.x read-only behavior. Windows GUI acceptance remains pending until tested on the assessment VM.
 
@@ -111,7 +114,7 @@ This is a targeted **native Windows** test. An additional full DarkRelay assessm
 If UAC opens a separate console, do not use a URL/session fragment printed in the original parent. Treat the private GUI URL as an access credential; avoid sharing it in screenshots or logs. Automated tests simulate the OS calls and **do not** prove that native UAC actually works on the tester VM.
 
 
-## v2.2.0 — Final package smoke (pending)
+## Historical v2.2.0 — Final package smoke (archived instructions)
 
 Use the production **Tester ZIP** rather than a development source directory for a light smoke test. Validate elevated GUI startup and browser token, open the completed integrity-verified M2-p4 assessment in read-only mode, inspect one TC with multiple linked WCRs and their separate cards, and review Evidence & Guidance and a sanitized Client Appendix. Do not modify the baseline assessment just to prove packaging. Use the **Source ZIP** for regression and audit commands. Complete a clean Windows installation walkthrough and compare both manifests/checksums. See [release validation](release-validation.md).
 

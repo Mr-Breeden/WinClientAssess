@@ -39,19 +39,31 @@ TEST_CASE_POLICY = {
 }
 
 
-def _case_applicable(case, assessment_dir, mode, installer_suffix, capabilities):
+def case_exclusion_reasons(case, assessment_dir, mode, installer_suffix, capabilities):
+    """Single authoritative explanation of the case applicability policy.
+
+    Return only names/coverage flags, never file contents or local profile paths.
+    """
     policy = TEST_CASE_POLICY.get(case["id"], {"modes": {"static", "full"}})
+    reasons = []
     if mode not in policy.get("modes", {"static", "full"}):
-        return False
-    if policy.get("installer_exts") and installer_suffix not in policy["installer_exts"]:
-        return False
-    if any(not capabilities.get(capability) for capability in policy.get("capabilities", set())):
-        return False
-    if case["id"] == "TC-AR-001" and not _has_managed_runtime_evidence(assessment_dir):
-        # A generated runtime classification report does not mean a managed
-        # target exists. Native-only assessments must not get a .NET test.
-        return False
-    return all(artifact_path(assessment_dir, filename).is_file() for filename in policy.get("files", set()))
+        reasons.append('Requires assessment mode: ' + ', '.join(sorted(policy['modes'])))
+    if policy.get('installer_exts') and installer_suffix not in policy['installer_exts']:
+        reasons.append('Requires installer type: ' + ', '.join(sorted(policy['installer_exts'])))
+    missing_caps = sorted(c for c in policy.get('capabilities', set()) if not capabilities.get(c))
+    if missing_caps:
+        reasons.append('Evidence capabilities unavailable: ' + ', '.join(missing_caps))
+    if case['id'] == 'TC-AR-001' and not _has_managed_runtime_evidence(assessment_dir):
+        reasons.append('No managed-runtime target evidence recorded')
+    missing_reports = sorted(name for name in policy.get('files', set())
+                             if not artifact_path(assessment_dir, name).is_file())
+    if missing_reports:
+        reasons.append('Supporting reports unavailable: ' + ', '.join(missing_reports))
+    return reasons
+
+
+def _case_applicable(case, assessment_dir, mode, installer_suffix, capabilities):
+    return not case_exclusion_reasons(case, assessment_dir, mode, installer_suffix, capabilities)
 
 
 def _has_managed_runtime_evidence(assessment_dir: Path) -> bool:
@@ -101,7 +113,10 @@ def generate_test_cases(assessment_dir: Path, mode="static", installer_suffix=""
 
     applicable_cases = [_applicable_case(case, assessment_dir) for case in cases
                         if _case_applicable(case, assessment_dir, mode, installer_suffix, capabilities)]
-    excluded_count = len(cases) - len(applicable_cases)
+    excluded = [(case, case_exclusion_reasons(case, assessment_dir, mode, installer_suffix, capabilities))
+                for case in cases]
+    excluded = [(case, reasons) for case, reasons in excluded if reasons]
+    excluded_count = len(excluded)
 
     width = 96
     lines = [
@@ -114,7 +129,7 @@ def generate_test_cases(assessment_dir: Path, mode="static", installer_suffix=""
         "",
         "Applicability:",
         "  This checklist is generated from the assessment mode and evidence actually produced.",
-        "  Cases whose required phase or supporting files were not generated are intentionally omitted.",
+        "  Specific exclusions and the current evidence limitations are listed immediately below.",
         "  Managed-runtime tests require managed target evidence; if decompiled source is absent,",
         "  the procedure uses runtime classification and instrumentation instead.",
         "",
@@ -131,6 +146,14 @@ def generate_test_cases(assessment_dir: Path, mode="static", installer_suffix=""
         "",
     ]
 
+    # Explicit reasons are informational only; they do not create another checklist.
+    lines += ['EXCLUDED TEST CASES — APPLICABILITY EXPLANATIONS', '-' * width,
+              'Excluded cases are not failed tests. Availability follows collected evidence and selected scope.', '']
+    for case, reasons in excluded:
+        lines.append(f"  {case['id']} — {case['title']}")
+        for reason in reasons:
+            lines.append('    - ' + reason)
+    lines += ['', 'APPLICABLE MANUAL TEST CASES', '']
     for case in applicable_cases:
         lines += [
             "=" * width,

@@ -262,7 +262,38 @@ async function loadAbout(){
 }
 function set(id,text){$(id).textContent=String(text??'—');}
 $('loadBtn').addEventListener('click',loadAssessment);$('assessmentPath').addEventListener('keydown',e=>{if(e.key==='Enter')loadAssessment();});$('refreshBtn').addEventListener('click',refresh);
-async function loadTools(){try{const result=await backend('tool_readiness');const tools=result.data.tools||[];set('toolCount',`${tools.filter(t=>t.found).length}/${tools.length}`);const required=tools.filter(t=>t.level==='REQUIRED');set('coreTools',`${required.filter(t=>t.found).length}/${required.length}`);replace($('toolTable'),makeTable(['Tool','Level','Usage','Available'],tools.map(t=>[t.name,t.level,t.usage,t.found?'YES':'NO'])));}catch(e){notice(e,true);}}
+let toolConfigRows=[];
+async function loadTools(){
+ try{
+  const [result,config]=await Promise.all([backend('tool_readiness'),request('/api/tool-configuration')]);
+  const tools=result.data.tools||[];toolConfigRows=config.tools||[];
+  set('toolCount',`${tools.filter(t=>t.found).length}/${tools.length}`);
+  const required=tools.filter(t=>t.level==='REQUIRED');set('coreTools',`${required.filter(t=>t.found).length}/${required.length}`);
+  const selector=$('toolConfigName'),prior=selector.value;selector.replaceChildren();
+  toolConfigRows.forEach(t=>{const option=el('option',`${t.name} · ${t.level} · ${t.found?'FOUND':'MISSING'}`);option.value=t.name;selector.appendChild(option);});
+  if(toolConfigRows.some(t=>t.name===prior))selector.value=prior;
+  showSelectedToolConfig();
+  replace($('toolTable'),makeTable(['Tool','Importance','Use','Detected','Method'],tools.map(t=>{
+   const row=toolConfigRows.find(x=>x.name===t.name);return [t.name,t.level,t.usage,t.found?'YES':'NO',row?.source||'—'];
+  })));
+ }catch(e){notice(e,true);}
+}
+function showSelectedToolConfig(){
+ const selected=toolConfigRows.find(t=>t.name===$('toolConfigName').value);
+ $('toolConfigPath').value=selected?.configured_path||'';
+ set('toolConfigStatus',selected?.configured_path?'Using a custom path; Clear restores automatic discovery.':
+  'No override set; WCA will discover this tool automatically if available.');
+}
+$('toolConfigName').addEventListener('change',showSelectedToolConfig);
+$('toolConfigClear').addEventListener('click',()=>{$('toolConfigPath').value='';set('toolConfigStatus','Click Save and verify to remove this override.');});
+$('toolConfigSave').addEventListener('click',async()=>{
+ const button=$('toolConfigSave');button.disabled=true;
+ try{
+  const name=$('toolConfigName').value, path=value('toolConfigPath');
+  const result=await request('/api/tool-configuration',{method:'POST',body:{confirmed:true,name,path}});
+  await loadTools();set('toolConfigStatus',result.message);
+ }catch(e){set('toolConfigStatus','Configuration not saved: '+e.message);}finally{button.disabled=false;}
+});
 $('toolsRefresh').addEventListener('click',loadTools);
 $('recentRefresh').addEventListener('click',loadRecent);
 $('managementRefresh').addEventListener('click',loadManagement);
@@ -316,15 +347,95 @@ function guidePoc(poc){const box=el('div');
  for(const key of ['architecture','requires_compilation','expected_output']){if(poc?.[key])box.appendChild(el('p',`${key.replaceAll('_',' ')}: ${poc[key]}`));}
  for(const key of ['build_or_invocation','verification']){if(poc?.[key]?.length){box.appendChild(el('strong',key.replaceAll('_',' ')));poc[key].forEach((step,i)=>box.appendChild(el('p',`${i+1}. ${step}`)));}}
  box.appendChild(el('p','All PoC builds and execution are initiated by the tester, never the web interface.','review-guide-muted'));return box;}
-async function previewQueueReport(name){
- const pane=$('queueReportPane');pane.hidden=false;
- set('queueReportName',name);set('queueReportContent','Loading verified report…');
- try{const result=await request('/api/report?'+params({assessment:state.assessment,name}));set('queueReportContent',result.content);}
- catch(e){set('queueReportContent','Report unavailable: '+e.message);}
+// One verified report viewer for active Testing Queue manual and WCR activities.
+// Reparent it directly beneath the clicked link, never to the top of the activity.
+let queueReportText='',queueReportLines=[],queueReportMatches=[],queueReportIndex=0,queueReportLoaded=false;
+function queueReportPath(){
+ if(!state.assessment||!queueReportLoaded)return '';
+ const name=$('queueReportName').textContent;
+ if(!/^[A-Za-z][A-Za-z0-9_-]{0,110}\.(txt|md|html)$/.test(name))return '';
+ return state.assessment.replace(/[\\/]+$/,'')+'\\reports\\'+name;
 }
-$('queueReportClose').addEventListener('click',()=>{$('queueReportPane').hidden=true;set('queueReportContent','');});
+function queuePowerShellCommand(){
+ // Require the literal query shown in the read-only report viewer. Empty
+ // searches must not unexpectedly open an integrity-protected report in Notepad.
+ const path=queueReportPath(),term=$('queueReportSearch').value.trim();
+ if(!path||!term)return '';
+ const quote=value=>"'"+value.replace(/'/g,"''")+"'";
+ return `Select-String -LiteralPath ${quote(path)} -SimpleMatch -Pattern ${quote(term)} | Select-Object LineNumber, Line`;
+}
+function updateQueueSearchCopy(){
+ const available=queueReportLoaded&&!!queueReportPath();
+ const hasTerm=!!$('queueReportSearch').value.trim();
+ $('queueReportCopySearch').disabled=!available||!hasTerm;
+ set('queueReportSearchHint',hasTerm?'Copy PowerShell search will use the current literal search term.':'Enter a search term to enable Copy PowerShell search.');
+}
+
+async function queueCopy(content){
+ if(!content)return;
+ try{await navigator.clipboard.writeText(content);set('queueReportCopyStatus','Copied.');}
+ catch(_){set('queueReportCopyStatus','Clipboard unavailable. Select and copy the text manually.');}
+}
+function renderReportMatches(){
+ updateQueueSearchCopy();
+ const query=$('queueReportSearch').value.trim().toLowerCase();
+ const panel=$('queueReportResults');
+ queueReportMatches=query?queueReportLines.flatMap((line,index)=>line.toLowerCase().includes(query)?[index]:[]):[];
+ queueReportIndex=0;
+ panel.hidden=!query;
+ if(!query)return;
+ updateReportMatch();
+}
+function updateReportMatch(){
+ const total=queueReportMatches.length,pos=queueReportMatches[queueReportIndex];
+ set('queueReportMatchStatus',total?`${total} matching line(s) · ${queueReportIndex+1}/${total} · line ${pos+1}`:'No matching lines in this report.');
+ $('queueReportPrevious').disabled=queueReportIndex<=0;
+ $('queueReportNext').disabled=queueReportIndex>=total-1;
+ if(total){
+  const before=Math.max(0,pos-3),after=Math.min(queueReportLines.length,pos+5);
+  set('queueReportMatchContext',queueReportLines.slice(before,after).map((line,i)=>`${before+i+1===pos+1?'→':' '} ${before+i+1}: ${line}`).join('\n'));
+ }else set('queueReportMatchContext','');
+}
+async function previewQueueReport(name,anchor){
+ const pane=$('queueReportPane');
+ if(anchor&&anchor.isConnected)anchor.appendChild(pane);
+ pane.hidden=false;queueReportLoaded=false;queueReportText='';queueReportLines=[];
+ $('queueReportSearch').value='';$('queueReportResults').hidden=true;set('queueReportCopyStatus','');
+ set('queueReportName',name);set('queueReportContent','Loading verified report…');
+ $('queueReportShortcuts').hidden=name.toLowerCase()!=='msi_analysis.txt';
+ $('queueReportCopyPath').disabled=true;$('queueReportCopySearch').disabled=true;
+ updateQueueSearchCopy();
+ try{
+  const assessment=state.assessment;
+  const result=await request('/api/report?'+params({assessment,name}));
+  if(state.assessment!==assessment||$('queueReportName').textContent!==name)return;
+  queueReportText=result.content;queueReportLines=queueReportText.split(/\r?\n/);queueReportLoaded=true;
+  set('queueReportContent',queueReportText);
+  $('queueReportCopyPath').disabled=false;
+  if(name.toLowerCase()==='msi_analysis.txt'){$('queueReportSearch').value='[CUSTOMACTION-';renderReportMatches();}
+  else updateQueueSearchCopy();
+ }catch(e){set('queueReportContent','Report unavailable: '+e.message);}
+}
+function closeQueueReport(){
+ const pane=$('queueReportPane');pane.hidden=true;queueReportLoaded=false;set('queueReportContent','');
+ $('queueReportCopyPath').disabled=true;updateQueueSearchCopy();
+ $('queueDetail').prepend(pane);
+}
+$('queueReportClose').addEventListener('click',closeQueueReport);
+$('queueReportCopyPath').addEventListener('click',()=>queueCopy(queueReportPath()));
+$('queueReportCopySearch').addEventListener('click',()=>{
+ const cmd=queuePowerShellCommand();
+ if(!cmd){updateQueueSearchCopy();return;}
+ queueCopy(cmd);
+});
+$('queueReportSearch').addEventListener('input',renderReportMatches);
+$('queueReportPrevious').addEventListener('click',()=>{if(queueReportIndex>0){queueReportIndex--;updateReportMatch();}});
+$('queueReportNext').addEventListener('click',()=>{if(queueReportIndex<queueReportMatches.length-1){queueReportIndex++;updateReportMatch();}});
+document.querySelectorAll('[data-report-term]').forEach(button=>button.addEventListener('click',()=>{
+ $('queueReportSearch').value=button.dataset.reportTerm;renderReportMatches();
+}));
 function guideReports(artifacts){const box=el('div');if(!artifacts?.length)return el('p','No supporting reports linked.');
- artifacts.forEach(name=>{const button=el('button',name,'button outline review-guide-link');button.type='button';button.addEventListener('click',()=>previewQueueReport(name));box.appendChild(button);});return box;}
+ artifacts.forEach(name=>{const button=el('button',name,'button outline review-guide-link');button.type='button';button.addEventListener('click',()=>previewQueueReport(name,box));box.appendChild(button);});return box;}
 function renderGuide(detail){
  const holder=el('div');holder.appendChild(el('h3','Validation and evidence guide'));
  holder.appendChild(guideSection(1,'Observed evidence',`${detail.evidence||'See supporting reports.'}
@@ -441,6 +552,14 @@ async function startJob(kind,data){
  }catch(e){notice(e,true);}
  finally{state.jobStarting=false;if(kind==='runtime'){$('guidedRuntimeBtn').textContent='Start Guided Runtime Observation';if(!state.jobId||state.jobFinished){if(state.status?.status==='COMPLETED'&&state.status?.integrity?.status==='PASS')$('guidedRuntimeBtn').disabled=false;}}}
 }
+function updateStagingAdvice(){
+ const target=value('newTarget').replace(/\//g,'\\');
+ const insideUserProfile=/^[A-Za-z]:\\Users\\[^\\]+\\/i.test(target);
+ $('newStagingAdvice').classList.toggle('staging-location-warning',insideUserProfile);
+ $('newStagingAdvice').querySelector('strong').textContent=insideUserProfile?
+  'Staging location advisory — user profile detected':'Assessment staging and ACL interpretation';
+}
+$('newTarget').addEventListener('input',updateStagingAdvice);
 $('createBtn').addEventListener('click',()=>{
  const data={target:value('newTarget'),target_type:value('newType'),mode:value('newMode'),name:value('newName'),output:value('newOutput'),primary_executable:value('newPrimary'),
  extract_installer:$('optExtract').checked,filesystem_snapshot:$('optFilesystem').checked,
@@ -522,7 +641,7 @@ async function pollJob(){
   const cpLabel=j.checkpoint&&!j.checkpoint.submitted?' · Action required':'';
   global.textContent=`${j.kind==='runtime'?'Guided Runtime':'Assessment'}: ${j.state}${cpLabel}`;
   set('jobSummary',`${j.kind}: ${j.state} · exit code ${j.exit_code??'pending'}`);
-  set('jobProgress',j.progress?`Stage: ${j.progress.stage} · ${j.progress.completed}/${j.progress.total} completed · ${j.progress.message}`:'');
+  set('jobProgress',j.progress?`Stage: ${j.progress.stage} · ${j.progress.completed}/${j.progress.total} applicable completed${j.progress.not_applicable?` · ${j.progress.not_applicable} not applicable`:''} · ${j.progress.message}`:'');
   // Keep the SAME pre element and only update when the log changes.
   const log=$('jobLog');const incoming=j.log||'';
   if(incoming!==state.lastLog){
@@ -561,7 +680,7 @@ async function pollJob(){
   }else{notice('Worker status unavailable: '+e.message,true);}
  }finally{state.pollBusy=false;}
 }
-Array.from(document.querySelectorAll('.browse')).forEach(btn=>btn.addEventListener('click',async()=>{try{const result=await request('/api/pick',{method:'POST',body:{kind:btn.dataset.pick}});if(result.path)$(btn.dataset.target).value=result.path;}catch(e){notice('Native picker unavailable; enter the full path manually.',true);}}));
+Array.from(document.querySelectorAll('.browse')).forEach(btn=>btn.addEventListener('click',async()=>{try{const result=await request('/api/pick',{method:'POST',body:{kind:btn.dataset.pick}});if(result.path){$(btn.dataset.target).value=result.path;if(btn.dataset.target==='newTarget')updateStagingAdvice();}}catch(e){notice('Native picker unavailable; enter the full path manually.',true);}}));
 $('globalJobStatus').addEventListener('click',()=>go('dashboard'));
 $('versionPill').textContent=bootstrap.version;$('footerVersion').textContent=bootstrap.version;$('assessmentPath').value=state.assessment;if(!token){notice('Open the private GUI session URL printed in the WCA terminal. The plain localhost address is not sufficient.',true);}else{if(state.assessment)refresh();loadRecent();const previous=localStorage.getItem('wcaActiveJob');if(previous){state.jobId=previous;state.lastLog=null;pollJob();}}setInterval(()=>{if(state.jobId&&!state.jobFinished)pollJob();},2500);
 
@@ -590,6 +709,17 @@ function queueActivities(){
  // Final Checklist. A completed manual test cannot conceal a pending WCR.
  return state.manual?.testing_queue?.items||[];
 }
+function renderQueueExcludedCases(){
+ const excluded=state.manual?.excluded_cases||[];
+ const box=$('queueExcludedCases');box.hidden=!excluded.length;
+ set('queueExcludedSummary',`Why ${excluded.length} manual test case(s) were excluded`);
+ const holder=$('queueExcludedList');holder.replaceChildren();
+ for(const item of excluded){
+  const div=el('div',undefined,'queue-excluded-item');
+  div.appendChild(el('strong',`${item.id} — ${item.title}`));
+  div.appendChild(el('p',(item.reasons||[]).join(' · '),'hint'));holder.appendChild(div);
+ }
+}
 function reviewPending(activity){return activity.pending_candidates||0;}
 function manualPending(activity){return activity.type==='manual'&&!activity.manual_complete;}
 function renderTestingQueue(){
@@ -611,7 +741,7 @@ function renderTestingQueue(){
 }
 async function openQueueActivity(a){
  state.activeQueue={id:a.id,type:a.type};
- $('queueReportPane').hidden=true;set('queueReportContent','');
+ closeQueueReport();
  const slot=$('queueDetail');$('queueEmpty').hidden=true;
  if(a.type==='manual'){
   const item=(state.manual?.items||[]).find(x=>x.id===a.id);
@@ -662,21 +792,11 @@ async function loadManualTests(){
   const cats=[...new Set(state.manual.items.map(item=>caseCategory(item.id)))].sort();
   cats.forEach(cat=>{const option=el('option',`${cat} — ${MANUAL_CATEGORIES[cat]||'Other'}`);option.value=cat;filter.appendChild(option);});
   filter.value=cats.includes(current)?current:'';
-  renderManualList();renderTestingQueue();renderWorkspaceSummary();
+  renderManualList();renderTestingQueue();renderWorkspaceSummary();renderQueueExcludedCases();
   const selected=(state.manual.items||[]).find(x=>x.id===state.selectedManual?.id);
   if(selected)await editManual(selected);else{$('manualEditor').hidden=true;$('manualEmpty').hidden=false;}
  }catch(e){set('workflowHint','Manual workflow unavailable: '+e.message);$('manualEditor').hidden=true;}
 }
-async function previewManualReport(name){
- if(!state.assessment||!state.selectedManual?.reports?.includes(name))return;
- $('manualReportPane').hidden=false;
- set('manualReportName',name);set('manualReportContent','Opening verified report…');
- try{
-  const result=await request('/api/report?'+params({assessment:state.assessment,name}));
-  if(state.selectedManual?.reports?.includes(result.name))set('manualReportContent',result.content);
- }catch(e){set('manualReportContent','Unable to open report: '+e.message);}
-}
-$('manualReportClose').addEventListener('click',()=>{$('manualReportPane').hidden=true;set('manualReportContent','');});
 // An independent WCR editor for each related candidate. Unlike the legacy
 // shared reviewEditor this does not move DOM nodes, hide sibling candidates, or
 // discard unsaved manual-test input when a candidate disposition is saved.
@@ -753,8 +873,6 @@ async function editManual(item){
  }catch(e){notice('Manual test details unavailable: '+e.message,true);return;}
  state.selectedManual=item;
  $('manualEditor').hidden=false;$('manualEmpty').hidden=true;
- $('manualReportPane').hidden=true;
- set('manualReportContent','');
  set('manualId',item.id);set('manualTitle',item.title);set('manualCompletionId',item.id);set('manualSaveHint','');
  const guidedEligible=!!item.related_candidates?.length&&item.related_candidates.every(c=>
   ['VALIDATED','INFORMATIONAL','NOT APPLICABLE'].includes(c.status)&&!c.changed_evidence);
@@ -806,7 +924,7 @@ async function editManual(item){
  if(!item.reports?.length)links.appendChild(el('p','No supporting report available for inline viewing. Use the procedure in this activity.','hint'));
  else item.reports.forEach(name=>{
   const link=el('button','View '+name+' →','button outline review-guide-link');link.type='button';
-  link.addEventListener('click',()=>previewManualReport(name));links.appendChild(link);
+  link.addEventListener('click',()=>previewQueueReport(name,links));links.appendChild(link);
  });
  renderManualList();
 }

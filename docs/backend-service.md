@@ -1,4 +1,4 @@
-# WCA v2.2.0 — Backend Service and Local GUI
+# WCA v2.2.2 — Backend Service and Local GUI
 
 ## Scope and non-goals
 
