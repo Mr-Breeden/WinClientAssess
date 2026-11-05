@@ -19,7 +19,7 @@ import sqlite3
 from pathlib import Path
 from typing import Iterable
 
-from utils.acl import broad_read_aces
+from utils.acl import broad_read_aces, broad_write_aces
 from utils.assessment_layout import artifact_path
 from utils.component_context import normalize_path
 from utils.privacy import sanitize_report_text
@@ -307,11 +307,20 @@ def run_local_storage_review(
         })
 
     selected = list(records.values())[:MAX_FILES]
-    acl_paths = [row["Path"] for row in selected]
+    # Collect read-only ACLs for each selected object AND its exact parent.
+    # This remains bounded to the target-correlated storage inventory and
+    # reuses the existing assessment-wide ACL cache (no full-drive walk).
+    acl_paths = list(dict.fromkeys(
+        path for row in selected for path in
+        (str(row["Path"]), ntpath.dirname(str(row["Path"]))) if path
+    ))
     acl_map = acl_cache.get_many(acl_paths) if acl_cache and acl_paths else {}
     for row in selected:
         acl = acl_map.get(str(row["Path"]).lower(), {})
         row["BroadReadACEs"] = broad_read_aces(acl)
+        row["FileAcl"] = acl
+        row["ParentPath"] = ntpath.dirname(str(row["Path"]))
+        row["ParentAcl"] = acl_map.get(row["ParentPath"].lower(), {})
         row["Indicators"] = _inspect_file(row["Path"])
         row["ExistsAtReview"] = bool(acl.get("Exists")) if acl else Path(row["Path"]).is_file()
 
@@ -382,6 +391,26 @@ def run_local_storage_review(
     lines += section("Target-Associated Storage Files", width, len(selected))
     if not selected:
         lines.append("No target-associated AppData/ProgramData files were observed in the available evidence.")
+    def append_acl(label, path, acl):
+        # This report contains metadata only, never file contents or secrets.
+        # Preserve explicit unavailable states instead of implying ACL safety.
+        lines.append(f"  {label} Path: {sanitize_report_text(path)}")
+        if not acl or acl.get("Error") or not acl.get("Exists"):
+            reason = "not collected" if not acl else (acl.get("Error") or "path absent at collection")
+            lines.append(f"  {label} ACL Status: UNAVAILABLE ({sanitize_report_text(str(reason))[:180]})")
+            return
+        lines.append(f"  {label} ACL Status: COLLECTED")
+        lines.append(f"  {label} Owner: {sanitize_report_text(str(acl.get('Owner') or 'Unknown'))}")
+        lines.append(f"  {label} Broad Write ACE Count: {len(broad_write_aces(acl))}")
+        entries = acl.get('Access') or []
+        if isinstance(entries, dict): entries = [entries]
+        for ace in entries[:16]:
+            if not isinstance(ace, dict): continue
+            fields = (str(ace.get(k, '')) for k in ('Identity', 'Rights', 'Type', 'Inherited'))
+            lines.append(f"    {label} ACE: " + ' | '.join(sanitize_report_text(x).replace('|', '/')[:300] for x in fields))
+        if len(entries) > 16:
+            lines.append(f"  {label} ACE Truncated: {len(entries)-16} additional entries; use an explicit live read-only recheck to inspect all ACEs")
+
     for idx, row in enumerate(selected, 1):
         lines += [
             f"[STORE-{idx:03d}] {sanitize_report_text(row['Path'])}",
@@ -392,6 +421,8 @@ def run_local_storage_review(
             kv("Broad read ACE count", len(row.get("BroadReadACEs") or []), 24, "  "),
             kv("Sensitive indicators", len(row.get("Indicators") or []), 24, "  "),
         ]
+        append_acl('File', row['Path'], row.get('FileAcl') or {})
+        append_acl('Parent', row.get('ParentPath') or '', row.get('ParentAcl') or {})
         for indicator in row.get("Indicators") or []:
             lines.append(
                 f"    Indicator: {indicator['Type']} | First match line: {indicator['Line']} | {indicator['Source']}"

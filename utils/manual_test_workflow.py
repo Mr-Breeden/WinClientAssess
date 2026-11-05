@@ -28,7 +28,7 @@ MAX_INPUT = 4000
 # Report mentions are candidates only: links must refer to actual verified
 # report files under this assessment, not arbitrary local paths.
 REPORT_RE = re.compile(r'(?<![\w./\\-])([A-Za-z][A-Za-z0-9_-]{0,110}\.(?:txt|md|html))\b', re.I)
-MAX_LINKABLE_REPORT = 500_000  # Match the local GUI's report-reading limit.
+MAX_LINKABLE_REPORT = 2_000_000  # Bounded GUI report preview; larger reports remain listed.
 
 
 def _case_guidance(root: Path, body: str) -> dict:
@@ -48,10 +48,10 @@ def _case_guidance(root: Path, body: str) -> dict:
     reports = []
     for name in mentioned:
         path = root / 'reports' / name
-        if (name != 'test_cases.txt' and path.is_file() and not path.is_symlink()
-                and path.stat().st_size <= MAX_LINKABLE_REPORT):
+        if (name != 'test_cases.txt' and path.is_file() and not path.is_symlink()):
             reports.append(name)
-    return {'reports': reports[:30], 'guidance': sections}
+    unavailable = [name for name in mentioned if name not in reports and name.lower().endswith('.txt') and name != 'test_cases.txt']
+    return {'reports': reports[:30], 'missing_reports': unavailable[:20], 'guidance': sections}
 
 
 def _verified_state(root: Path) -> AssessmentState:
@@ -137,7 +137,11 @@ def _snapshot(root: Path, *, verified: bool = True) -> dict:
         identifier = str(candidate.get('id', ''))
         if not identifier.startswith('WCR-'):
             continue
-        for case_id in candidate.get('test_cases', []) if isinstance(candidate.get('test_cases'), list) else []:
+        # One WCR decision editor per investigation: the first applicable TC
+        # owns its candidate card. Additional linked TCs remain independently
+        # testable but do not repeat the same WCR review form or count it twice.
+        candidate_tests = candidate.get('test_cases', []) if isinstance(candidate.get('test_cases'), list) else []
+        for case_id in candidate_tests[:1]:
             if not isinstance(case_id, str):
                 continue
             related = links.setdefault(case_id, [])
@@ -170,7 +174,13 @@ def _snapshot(root: Path, *, verified: bool = True) -> dict:
                        'client_notes': sanitize_report_text(previous.get('client_notes', ''))[:MAX_INPUT] if valid else '',
                        'changed_evidence': bool(previous and not matched) or (matched and previous.get('status') == 'ADDRESSED IN GUIDED REVIEW' and status == 'NOT STARTED'),
                        'updated_at': str(previous.get('updated_at', ''))[:40] if valid else ''})
-    return {'total': len(cases), 'resolved': total['COMPLETED'] + total['NOT APPLICABLE'] + total['ADDRESSED IN GUIDED REVIEW'],
+    active_ids = {case['id'] for case in cases}
+    historical_ids = sorted(key for key in saved if key not in active_ids and
+                            re.fullmatch(r'TC-[A-Z]{2}-\d{3}', str(key)))
+    # Do not delete or reinterpret historical decisions; active progress uses only the current checklist.
+    return {'historical_saved_decisions': len(historical_ids),
+            'historical_case_ids': historical_ids[:50],
+            'total': len(cases), 'resolved': total['COMPLETED'] + total['NOT APPLICABLE'] + total['ADDRESSED IN GUIDED REVIEW'],
             'remaining': total['NOT STARTED'] + total['IN PROGRESS'] + total['BLOCKED'],
             'by_status': total, 'changed_evidence': stale, 'items': output,
             'note': ('Manual testing outcomes are tester-recorded. COMPLETED and NOT APPLICABLE are not '
@@ -261,7 +271,7 @@ def read_manual_detail(root: Path, case_id: str) -> dict:
 
 
 def save_manual_decision(root: Path, *, case_id: str, fingerprint: str, status: str,
-                         notes: str = '', evidence_reference: str = '', client_notes: str = '', current_version: str = '2.2.2') -> dict:
+                         notes: str = '', evidence_reference: str = '', client_notes: str = '', current_version: str = '2.2.3') -> dict:
     root = Path(root)
     if (not isinstance(notes, str) or len(notes) > MAX_INPUT or
             not isinstance(client_notes, str) or len(client_notes) > MAX_INPUT or

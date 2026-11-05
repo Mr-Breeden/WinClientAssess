@@ -12,6 +12,13 @@ from utils.privacy import sanitize_report_text
 
 REDACTED = "<REDACTED>"
 
+# Named secrets are case-insensitive, including GA_API_SECRET / Dga_api_secret.
+# Analytics measurement IDs are public configuration context, not secrets.
+_ANALYTICS_CONTEXT = re.compile(r"(?i)\b(?:GA_|DGA_)?MEASUREMENT_ID\b")
+def analytics_context_names(text: str) -> list[str]:
+    return sorted({match.group().upper() for match in _ANALYTICS_CONTEXT.finditer(str(text))})
+
+
 # Process Monitor records the complete environment for Process Start/Create
 # events. Match credential-bearing variable/parameter names without treating
 # generic identifiers such as ordinary "key" values as secrets.

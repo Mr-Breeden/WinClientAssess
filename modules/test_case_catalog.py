@@ -58,14 +58,17 @@ TEST_CASES = [
             "id": "TC-PE-001",
             "title": "PE Mitigation Review",
             "risk": "Low",
-            "procedure": "Review ASLR, DEP/NX, CFG, architecture, and signing state for application executables and DLLs.",
+            "procedure": "Review ASLR, DEP/NX, and CFG header flags, architecture, and signing state; verify CFG instrumentation independently with DUMPBIN.",
             "how": [
                 "Open binary_security_review.txt.",
-                "Identify binaries where ASLR, DEP/NX, or CFG are disabled or absent.",
-                "Open high-value binaries with Detect It Easy for a second view of architecture/compiler/security characteristics.",
-                "Treat missing mitigations as review points; validate product context and exploitability before creating a finding.",
+                "Identify binaries where ASLR, DEP/NX, or the CFG header indicator is absent; these are triage observations, not verified exploitability.",
+                "In TC-PE-001, select All, flagged, or one PE entry and click Run DUMPBIN and Analyze CFG. Review Guard, CF Instrumented, and FID table present for each result; use manual CMD only if needed.",
+                "The one-click check saves raw outputs and a readable summary separately beside the assessment. For reproduction, use the Advanced manual DUMPBIN CMD commands, not PowerShell.",
+                "Optionally cross-check ASLR, DEP/NX, CFG, SafeSEH, and signing with the NetSPI Get-PESecurity PowerShell module, which is separate from DUMPBIN CMD testing.",
+                "PE header GUARD_CF alone does not prove CFG instrumentation; verify CF Instrumented and FID table present in the load-config Guard Flags, and document any mismatch before making a finding.",
+                "Treat missing mitigations as review points; validate product context, PE architecture, and actual impact before reporting a vulnerability.",
             ],
-            "expected": "Security-sensitive binaries use appropriate platform exploit mitigations.",
+            "expected": "Applicable binaries contain the expected PE mitigation metadata; where CFG applies, DUMPBIN reports Guard, CF Instrumented and FID table present. A metadata gap alone does not prove exploitability.",
         },
         {
             "id": "TC-CF-001",
@@ -73,7 +76,7 @@ TEST_CASES = [
             "risk": "High",
             "procedure": "Review configuration files, embedded resources, scripts, local databases, and package contents for credentials, private keys, tokens, or insecure connection strings.",
             "how": [
-                "Open configuration_review.txt, secrets_review.txt, and high_value_security_artifacts.txt. Secrets Review includes redacted printable-string triage for PE images as well as text/config files.",
+                "Open configuration_review.txt, secrets_review.txt, and high_value_security_artifacts.txt. Use the dedicated Potential Secret Indicator Review to inspect credible candidates, redacted source locations, and context. This is the authoritative secret-review interface; do not rerun a duplicate redacted-indicator check. An empty candidate list does not prove the absence of secrets.",
                 "Use Windows Explorer to navigate to each relevant extracted or installed file path.",
                 "Open text-based configuration with a text editor; use an appropriate database viewer for SQLite/database files.",
                 "Validate whether detected passwords, tokens, API keys, connection strings, certificates, or private keys are real and usable; do not report pattern matches without validation.",
@@ -90,7 +93,7 @@ TEST_CASES = [
                 "For text/config indicators, inspect only the reported first matching line locally and determine whether the indicator represents a real active credential, token, private key, connection string, or other security-sensitive value; do not copy the value into WCA evidence.",
                 "For SQLite observations, inspect table/column names and only query row values when the authorized manual test requires it; WCA intentionally stores schema names rather than row contents.",
                 "For registry observations, inspect the exact key/value location with Regedit or Get-ItemProperty and validate whether sensitive application state is exposed or modifiable across users.",
-                "Use Get-Acl, icacls, or AccessChk to verify effective read/write permissions and confirm the affected data belongs to the assessed application before reporting an issue.",
+                "Use the read-only ACL action within the How to Perform step to inspect the reported storage file and parent ACL, then verify effective read/write access under the correct standard-user token before reporting an issue.",
             ],
             "expected": "Sensitive local application state is restricted to intended principals and protected using appropriate Windows credential/storage mechanisms when necessary.",
             "look_for": "A real active secret or trusted application state at a target-associated location together with effective access outside the intended user/application trust boundary.",
@@ -183,7 +186,7 @@ TEST_CASES = [
             "how": [
                 "Run Windows Client Assessment in Full mode and enable the optional Procmon capture, or start a separate Guided Runtime Observation after the assessment completes.",
                 "After Procmon starts, launch the target client and exercise representative authentication, configuration, update, file-open/save, and privileged workflows that are in scope.",
-                "Press Enter to stop the capture, then open procmon_summary.txt and the category files generated from the CSV trace.",
+                "Use Stop Guided Runtime Observation in the browser to stop the capture, then open procmon_summary.txt and the category files generated from the CSV trace.",
                 "Prioritize procmon_access_denied.txt, procmon_registry_writes.txt, procmon_file_writes.txt, procmon_process_activity.txt, and procmon_network_activity.txt for manual review.",
                 "Treat unusual runtime activity as a point of interest until its security impact and privilege boundary are validated.",
             ],
@@ -400,3 +403,7 @@ TEST_CASES = [
             "expected": "Pipe permissions and application-layer authorization prevent lower-privileged callers from controlling privileged operations or trusted data.",
         },
     ]
+
+# P16 consistent security-objective and reportability guidance for every case.
+from modules.test_case_explanations import enrich_test_cases
+TEST_CASES = enrich_test_cases(TEST_CASES)

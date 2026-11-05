@@ -17,7 +17,14 @@ def _quote_ps(value: str) -> str:
 
 
 def _known_path(value: str) -> str | None:
+    # Detector evidence may append semicolon-delimited labels such as
+    # `; candidates=C:\Program.exe`.  They are NOT part of an executable path.
+    # Split metadata before quoting; never construct commands from the tail.
+    value = re.split(r'\s*;\s*(?:candidates?|reason|status|count|account|notes?)\s*=',
+                     str(value), maxsplit=1, flags=re.I)[0]
     value = value.strip().strip('"\'').rstrip('.,;) ')
+    if ';' in value or '\x00' in value:
+        return None
     if ('\n' in value or '\r' in value or '\x00' in value or
             not re.match(r'^[A-Za-z]:\\', value) or len(value) > 240 or
             '<' in value or '>' in value):
@@ -124,6 +131,41 @@ def _broad_acl_paths(root: Path | None) -> list[str]:
     return results[:12]
 
 
+def _routine_protected_directory(path: str) -> bool:
+    """Default-protected Windows locations are low-priority, not proof of safety.
+
+    This only affects recommendations. Never infer that a live or recorded ACL
+    matches a default Windows installation.
+    """
+    path = ntpath.normpath(str(path or '')).casefold().rstrip('\\')
+    drive, tail = ntpath.splitdrive(path)
+    if not drive:
+        return False
+    # C:\ is a generic unquoted service candidate (C:\Program.exe).
+    if not tail or tail == '\\':
+        return True
+    return any(tail == prefix or tail.startswith(prefix + '\\') for prefix in (
+        '\\windows', '\\program files', '\\program files (x86)'))
+
+
+def _observed_broad_write(path: str, root: Path | None) -> bool:
+    """Require an exact recorded ACL issue for a candidate, not OS defaults."""
+    normalized = ntpath.normcase(ntpath.normpath(path))
+    return any(ntpath.normcase(ntpath.normpath(value)) == normalized
+               for value in _broad_acl_paths(root))
+
+
+def _specific_privilege_block(root: Path | None, source_record: object) -> str:
+    """Return only the selected POI block, never the first unrelated POI."""
+    label = str(source_record or '')
+    if not re.fullmatch(r'POI-PB-\d{1,5}', label):
+        return ''
+    text = _report(root, 'privilege_boundary_review.txt')
+    match = re.search(r'(?m)^\[' + re.escape(label) + r'\][^\n]*\n(.*?)(?=^\[POI-PB-|\Z)',
+                      text, re.S | re.M)
+    return match.group(1) if match else ''
+
+
 def _tool_command(display: str, arguments: str, *, console_paths: bool = False, tools: dict | None = None) -> str:
     """Resolve the executable variant actually detected for live guidance.
 
@@ -227,6 +269,17 @@ def checks(item: dict, root: Path | None = None, *, console_paths: bool = False,
                 'Get-Content -LiteralPath ' + report('dotnet_source_review.txt') + ' | Select-String -Pattern ' + _quote_ps(r'Scope\s*:\s*FIRST-PARTY') + ' -Context 3,1 | Select-Object -First 100',
                 'Open the indicated FIRST-PARTY decompiled source file and line in working/decompiled_dotnet; validate data flow and exploitability before reporting.',
             )
+    if module == 'Secrets Review':
+        # TC-CF-001: show the indicated PE-string locations and the adjacent
+        # encoding/redaction metadata, rather than an arbitrary report preface.
+        # Use -LiteralPath so spaces, apostrophes and wildcard characters in
+        # assessment folder names do not affect report selection.
+        ref = report('secrets_review.txt')
+        return (
+            'Select-String -LiteralPath ' + ref + ' -Pattern ' + _quote_ps('PE file offset') + ' -SimpleMatch -Context 0,6',
+            'Select-String -LiteralPath ' + ref + ' -Pattern ' + _quote_ps(r'^\s*Line\s*:') + ' -Context 0,4',
+            'If the first command has no matches, the report contains no PE-offset indicators. Review text-line indicators and configuration_review.txt separately; redacted matches are not proven secrets.',
+        )
     if module == 'DLL Search Review':
         directory = _known_path(_field(evidence, 'Search Directory'))
         missing = _known_path(_field(evidence, 'Missing DLL'))
@@ -251,8 +304,8 @@ def checks(item: dict, root: Path | None = None, *, console_paths: bool = False,
                     'Inspect the exact pipe ACL, server identity and supported operations; connection is not exploitation.')
         return ('Get-Content -LiteralPath ' + report('ipc_review.txt') + ' | Select-String -Pattern "pipe\\|Broad Access Evidence" -Context 1,2',)
     if module in ('Services Review', 'Privilege Boundary Review'):
-        # A broad-write DLL directory unrelated to this service must never
-        # become an asserted service/privilege-boundary target.
+        # Never borrow the first POI or a generic permissions directory for a
+        # different service. A linked TC owns the detailed verification steps.
         service = _field(evidence, 'Component')
         path = _known_path(_field(evidence, 'Path'))
         if not path:
@@ -263,34 +316,40 @@ def checks(item: dict, root: Path | None = None, *, console_paths: bool = False,
             match = re.search(r'(?m)^\s*([A-Za-z0-9_.-]+):\s*[A-Za-z]:\\', evidence)
             service = match.group(1) if match else ''
         if module == 'Privilege Boundary Review' and (not service or not path):
-            text = _report(root, 'privilege_boundary_review.txt')
-            service = service or _field(text, 'Component')
-            path = path or _known_path(_field(text, 'Path'))
+            block = _specific_privilege_block(root, item.get('source_record'))
+            service = service or _field(block, 'Component')
+            path = path or _known_path(_field(block, 'Path'))
         commands = []
         if service and re.fullmatch(r'[A-Za-z0-9_.-]{1,120}', service):
-            commands.extend(('sc.exe qc ' + _quote_ps(service),
-                             'Get-CimInstance Win32_Service -Filter ' + _quote_ps('Name="' + service + '"') + ' | Select-Object Name,StartName,PathName,State'))
-        else:
-            commands.append('Get-Content -LiteralPath ' + report('services_review.txt') + ' | Select-String -Pattern "Name|Path|Account" -Context 1,3')
+            commands.append('sc.exe qc ' + _quote_ps(service))
+            # The TC service validation already covers full configuration and
+            # SDDL. WCR checks are optional focused follow-up, not a redo.
         if path:
             parent = ntpath.dirname(path)
-            if parent:
+            if parent and (_observed_broad_write(parent, root) or
+                           not _routine_protected_directory(parent)):
                 commands.append('icacls ' + _quote_ps(parent))
-            # Check possible unquoted parsing candidates only when the source
-            # evidence explicitly describes an unquoted command, never treat
-            # an ordinary quoted service as a hijack.
-            detail = (evidence + ' ' + _report(root, 'privilege_boundary_review.txt')[:3000]).lower()
-            if 'unquoted' in detail and ' ' in path:
-                fragments = path.split(' ')
-                for j in range(1, len(fragments)):
-                    earlier_exe = ' '.join(fragments[:j]) + '.exe'
+            # Potential unquoted-path names are **not** evidence that a user
+            # can create the executable. Only inspect a candidate directory
+            # when an actual anomaly was recorded there, or it is in an
+            # uncommon/untrusted location. Suppress repetitive C:\ checks.
+            if 'unquoted' in evidence.casefold() and ' ' in path:
+                for j, char in enumerate(path):
+                    if char != ' ':
+                        continue
+                    earlier_exe = path[:j] + '.exe'
                     directory = ntpath.dirname(earlier_exe)
-                    if directory and directory.lower() != parent.lower():
-                        command = 'icacls ' + _quote_ps(directory) + '  # Could an unprivileged user create ' + _quote_ps(earlier_exe) + '?'
-                        if command not in commands:
-                            commands.append(command)
-        else:
-            commands.append('Get-Content -LiteralPath ' + report('permissions_review.txt') + ' | Select-String -Pattern "Service executable|Service directory|Broad Write ACEs" -Context 0,4')
+                    if not directory or directory.casefold() == parent.casefold():
+                        continue
+                    if (_observed_broad_write(directory, root) or
+                            not _routine_protected_directory(directory)):
+                        cmd = 'icacls ' + _quote_ps(directory)
+                        if cmd not in commands:
+                            commands.append(cmd)
+            if not commands:
+                commands.append('No elevated-service ACL anomaly was correlated to this specific path. Review the linked TC; do not assume the default Windows ACL is secure.')
+        elif not commands:
+            commands.append('No assessment-specific service or executable path was resolved. Review the linked TC and recorded evidence before performing an ACL check.')
         return tuple(commands)
     if module == 'Permissions Review':
         paths = _broad_acl_paths(root)
@@ -398,5 +457,34 @@ def checks(item: dict, root: Path | None = None, *, console_paths: bool = False,
     if artifacts:
         filename = next((f for f in artifacts if f.endswith('.txt') and re.fullmatch(r'[a-zA-Z0-9_.-]+\.txt', f)), None)
         if filename:
+            if filename == 'secrets_review.txt':
+                return (
+                    'Select-String -LiteralPath ' + report(filename) + ' -Pattern ' + _quote_ps('PE file offset') + ' -SimpleMatch -Context 0,6',
+                    'Select-String -LiteralPath ' + report(filename) + ' -Pattern ' + _quote_ps(r'^\s*Line\s*:') + ' -Context 0,4',
+                )
             return ('Get-Content -LiteralPath ' + report(filename) + ' | Select-Object -First 100',)
     return ('Get-Content -LiteralPath ' + report('test_cases.txt') + ' | Select-String -Pattern ' + _quote_ps(title[:70]) + ' -Context 2,8',)
+
+
+def typed_steps(lines) -> list[dict]:
+    """Classify generated WCR guidance for the browser; only actual commands get Copy.
+
+    Unknown/freeform instructions are never presented as shell commands.
+    Historical TXT/CLI consumers continue to receive the original strings.
+    """
+    starters = re.compile(
+        r'(?i)^(?:\$[A-Za-z_][\w]*\s*=|\$tool\s*=|\&\s+|'
+        r'(?:Get|Set|Test|Select|Import|Format|Where|ForEach|Write|Start|Stop|Compare|New|Convert|Measure|Out|Expand|Resolve|Find|Invoke)-[A-Za-z]+\b|'
+        r'icacls\s|sc\.exe\s|python\s+-c\s|dumpbin\s|findstr\s|'
+        r'if\s*\(|try\s*\{|\(Get-|\$[A-Za-z_]\w*\s*\|)'
+    )
+    result = []
+    for row in lines or ():
+        value = str(row or '').strip()
+        if not value: continue
+        executable = bool(starters.match(value))
+        # Freeform text after an earlier statement must not become another
+        # executable line simply because it happens to mention a tool name.
+        result.append({'kind':'command' if executable else 'instruction',
+                       'shell':'PowerShell' if executable else '', 'text':value})
+    return result

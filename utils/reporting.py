@@ -1,6 +1,7 @@
 from collections import Counter
 from pathlib import Path
 import json
+import re
 
 from utils.artifacts import module_artifacts
 from utils.consolidated_report import generate_consolidated_report
@@ -292,6 +293,23 @@ class AssessmentReporter:
         not_applicable = [name for name, info in self.status.items() if info.get('status') == 'NOT APPLICABLE']
         coverage_lines += ['', 'Not applicable modules (not failed or untested prerequisites):']
         coverage_lines += [f'  - {name}' for name in not_applicable] or ['  None']
+        # Finalize provenance before interpreting operational cleanup failures.
+        # The report is idempotent and the coverage summary is not an evidence
+        # report; this does not alter previously collected artifacts.
+        from utils.collection_provenance import finalize as finalize_provenance
+        finalize_provenance(self.assessment_dir, self.status, self.installer)
+        # Cleanup/termination failures are provenance events. They do not
+        # invalidate successfully exported/sanitized evidence, but must not be
+        # invisible merely because coverage is COMPLETE.
+        provenance_file = self.assessment_dir / 'reports' / 'collection_provenance.txt' if hasattr(self, 'assessment_dir') else None
+        if provenance_file and provenance_file.is_file():
+            provenance_text = provenance_file.read_text(encoding='utf-8', errors='replace')
+            cleanup_failures = [line.strip() for line in provenance_text.splitlines()
+                                if re.search(r'PROV-\d+\s*\|\s*FAILED\s*\|.*Procmon', line)]
+            if cleanup_failures:
+                coverage_lines += ['', 'Noncritical collection provenance warnings (review independently of coverage):']
+                coverage_lines += ['  - ' + sanitize_report_text(line)[:240] for line in cleanup_failures[:10]]
+                coverage_lines += ['  Capture/export completeness must be checked separately; a failed Procmon terminate command may be recoverable.']
         coverage_lines += ["", "Optional evidence gaps:"]
         coverage_lines += [f"  - {name}" for name in optional_gaps] or ["  None"]
         coverage_lines += [
@@ -304,8 +322,6 @@ class AssessmentReporter:
             "  that is different from SKIPPED / NOT COLLECTED or COLLECTION UNAVAILABLE.",
         ]
         self.write_text("coverage_summary.txt", "\n".join(coverage_lines).rstrip() + "\n")
-        from utils.collection_provenance import finalize as finalize_provenance
-        finalize_provenance(self.assessment_dir, self.status, self.installer)
         generate_consolidated_report(
             assessment_dir=self.assessment_dir,
             assessment_name=self.assessment_name,

@@ -21,7 +21,7 @@ Portable targets add `target_analysis.txt` and directly scope the selected execu
 
 ### Sensitive-string handling
 
-Secrets Review inspects relevant text/config sources and also performs bounded printable ASCII/UTF-16LE triage on PE files. Reports retain indicator type/location/encoding and a redacted value marker, not the secret value itself. Binary-string hits are points of interest requiring tester context.
+Secrets Review inspects relevant text/config sources and also performs bounded printable ASCII/UTF-16LE triage on PE files. Reports retain indicator type/location/encoding and a redacted value marker, not the secret value itself. The current scanner additionally classifies credential-bearing fields, validates recognized complete PEM keys offline, suppresses ordinary markup and records safe public-key fingerprints. Binary-string hits are points of interest requiring tester context; a valid key format is not automatically a vulnerability.
 
 ## Full-mode system-state analysis
 

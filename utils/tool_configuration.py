@@ -39,6 +39,7 @@ def configured_tools() -> list[dict]:
         detection = tool_detection.detect_tools()
         return [dict(name=name, level=level, usage=usage,
                      found=detection[name]['found'], source=detection[name]['source'],
+                     detected_path=str(detection[name].get('path') or ''),
                      configured_path=str(entries.get(name) or entries.get(name.lower()) or ''))
                 for name, (_, level, usage) in tool_detection.TOOLS.items()]
 
@@ -55,7 +56,7 @@ def configure_tool(name: object, path: object) -> None:
             candidate = Path(path.strip())
             if not candidate.is_absolute() or candidate.is_symlink() or not candidate.is_file():
                 raise ValueError('Provide an existing absolute executable file path.')
-            if candidate.suffix.lower() not in ('.exe', '.bat', '.cmd', '.com', '.ps1'):
+            if candidate.suffix.lower() not in (('.psm1',) if name == 'PESecurity' else ('.exe', '.bat', '.cmd', '.com', '.ps1')):
                 raise ValueError('Expected a supported executable or launcher file.')
             names = {x.casefold() for x in tool_detection.TOOLS[name][0]}
             if candidate.name.casefold() not in names:

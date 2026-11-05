@@ -357,13 +357,13 @@ def run_procmon_analysis(
         "  Summarizes Process Monitor activity for Windows Client Assessment runtime targets. Events are",
         "  triage data and should not be treated as vulnerabilities without manual validation.",
         "",
-        f"Source CSV              : {source}",
-        f"Sanitized evidence      : {sanitized_source}",
+        "Source CSV              : Temporary capture input (not a retained evidence link)",
+        f"Sanitized evidence      : working/{sanitized_source.name} (assessment-owned)",
         f"Detected encoding       : {data['encoding']}",
         f"Sensitive values redacted: {redaction_count}",
         f"Total CSV rows          : {data['total_rows']}",
         f"Target-relevant rows    : {data['relevant_rows']}",
-        f"Target-only working CSV : {data['target_filtered_csv'] or 'Not generated (no target filtering)'}",
+        f"Target-only working CSV : {'working/guided_runtime_target_events.csv' if data['target_filtered_csv'] else 'Not generated (no target filtering)'}",
         f"Target-only CSV rows    : {data['target_filtered_rows']}",
         f"Target filtering active : {data['target_filter_active']}",
         f"Target process names    : {', '.join(data['target_process_names']) if data['target_process_names'] else 'ALL PROCESSES'}",
@@ -390,6 +390,29 @@ def run_procmon_analysis(
     lines += ["", "TOP RESULTS", "-" * width]
     for name, count in list(data["result_counts"].items())[:20]:
         lines.append(f"{name:50} {count:>10}")
+
+    # WerFault child creation is an investigation lead, not proof of a
+    # security-relevant crash. Do not copy command-line parameters or dump data.
+    crash_leads = []
+    for event in data.get('process_activity', []):
+        process_name = str(event.get('Process', '')).strip()
+        executable = ntpath.basename(str(event.get('Path', '')).replace('/', '\\')).casefold()
+        operation = str(event.get('Operation', '')).casefold()
+        if executable == 'werfault.exe' and operation in ('process create', 'process start'):
+            identifier = (process_name, str(event.get('PID', '')).strip())
+            if identifier not in crash_leads:
+                crash_leads.append(identifier)
+    if crash_leads:
+        lines += ['', 'APPLICATION ERROR REPORTING ACTIVITY (MANUAL REVIEW)', '-' * width,
+                  f'WerFault launches by target-correlated processes: {len(crash_leads)}',
+                  'These are historical process-creation observations, not confirmed crashes or vulnerabilities.',
+                  'Verify exception details using Windows Application Event Logs and available authorized crash evidence.']
+        for name, pid in crash_leads[:30]:
+            lines.append('  - ' + sanitize_report_text(name)[:100] + ' (PID ' + sanitize_report_text(pid)[:15] + ')')
+    else:
+        lines += ['', 'APPLICATION ERROR REPORTING ACTIVITY (MANUAL REVIEW)', '-' * width,
+                  'No WerFault launches found in retained target-correlated process-create events.',
+                  'Absence of observations does not prove the application did not crash.']
 
     (artifact_path(assessment_dir, "procmon_summary.txt")).write_text(
         "\n".join(lines).rstrip() + "\n",
@@ -430,7 +453,7 @@ def run_procmon_analysis(
         "",
         f"Sensitive values redacted : {redaction_count}",
         f"Sensitive field names      : {', '.join(sorted(sensitive_names)) or 'None'}",
-        f"Sanitized evidence         : {sanitized_source}",
+        f"Sanitized evidence         : working/{sanitized_source.name} (assessment-owned; confirm presence)",
         "",
     ]
     if redaction_count:
@@ -446,6 +469,14 @@ def run_procmon_analysis(
         ]
     else:
         runtime_secret_lines.append("No configured sensitive runtime value patterns were detected.")
+    if any('SECRET' in name.upper() for name in sensitive_names):
+        runtime_secret_lines += [
+            "",
+            "CONTEXTUAL REVIEW (NOT A SECRET FINDING)",
+            "- If Google Analytics API-secret fields are observed, consider nearby GA_MEASUREMENT_ID or",
+            "  Dga_measurement_id configuration identifiers. Measurement IDs are generally public",
+            "  identifiers; do not flag them as credentials or broadly search for every ID field.",
+        ]
     (artifact_path(assessment_dir, "runtime_secrets_review.txt")).write_text(
         "\n".join(runtime_secret_lines).rstrip() + "\n",
         encoding="utf-8",
@@ -474,7 +505,7 @@ def run_procmon_analysis(
         )
 
     return {
-        "status": "WARN" if data["missing_dlls"] or data["access_denied"] or redaction_count else "PASS",
+        "status": "WARN" if data["missing_dlls"] or data["access_denied"] else "PASS",
         "details": (
             f"{data['relevant_rows']} target-relevant event(s); "
             f"{len(data['missing_dlls'])} missing DLL lookup(s); "

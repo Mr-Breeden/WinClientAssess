@@ -1,6 +1,6 @@
-# WCA v2.2.2 — Clean Windows 11 Assessment VM Setup Guide
+# WCA v2.2.3 — Clean Windows 11 Assessment VM Setup Guide
 
-**Applies to:** WCA v2.2.2, Windows 11 x64, PowerShell, authorized thick-client security assessments  
+**Applies to:** WCA v2.2.3, Windows 11 x64, PowerShell, authorized thick-client security assessments  
 **Scope:** Preparation, tool installation, detection and validation for the production source and tester distributions.
 
 > WCA does not automatically execute PoCs or install/launch/exercise assessment targets. Install external analysis tools from approved sources and retain a clean VM snapshot. Do not disable endpoint protections by default.
@@ -20,7 +20,7 @@
 | Python **3.10+** (x64) | Yes | WCA CLI and collectors | https://www.python.org/downloads/windows/ |
 | Windows PowerShell | Yes | Windows-native inspection and collectors | Included with Windows 11; confirm PowerShell runs |
 | 7-Zip (x64) | Required by WCA tool detection | Archive/package extraction | https://www.7-zip.org/download.html |
-| WCA v2.2.2 source or tester distribution | Yes | Assessment engine, modules and documentation | Approved WCA release ZIP |
+| WCA v2.2.3 source or tester distribution | Yes | Assessment engine, modules and documentation | Approved WCA release ZIP |
 | .NET SDK (supported x64 release) | Recommended for managed targets | Installs ILSpyCmd and .NET diagnostics | https://dotnet.microsoft.com/download |
 
 Install Python with the launcher `py.exe` available. Install 7-Zip to the normal location (`C:\Program Files\7-Zip\7z.exe`) unless you have an organizational standard. Verify:
@@ -35,7 +35,7 @@ Get-Command powershell.exe
 
 ## 3. Extract WCA and install Python dependencies
 
-Open PowerShell in the **extracted** WCA v2.2.2 directory (not inside the ZIP):
+Open PowerShell in the **extracted** WCA v2.2.3 directory (not inside the ZIP):
 
 ```powershell
 .\install_dependencies.ps1
@@ -44,7 +44,7 @@ python .\wca.py --version
 python .\wca.py --backend-action capabilities
 ```
 
-From a normal PowerShell session, `python .\wca.py --gui` requests UAC Administrator elevation and then starts the local GUI in a **new elevated console**. If UAC is cancelled the GUI remains stopped. An Administrator PowerShell launch skips the prompt.
+From a normal PowerShell session, `python .\wca.py` requests UAC Administrator elevation and then starts the local GUI in a **new elevated console**. If UAC is cancelled the GUI remains stopped. An Administrator PowerShell launch skips the prompt.
 
 The installer creates `.venv`, updates pip and installs `rich`, `pefile`, and `psutil`. It checks for 7-Zip, but does **not** install the external utilities in the sections below.
 
@@ -140,7 +140,7 @@ Adjust executable names to the exact official ZIP contents and your environment.
 
 ## 7. Validate the installed environment
 
-In the WCA v2.2.2 directory with `.venv` activated:
+In the WCA v2.2.3 directory with `.venv` activated:
 
 ```powershell
 python -c "import rich,pefile,psutil; print('Core Python dependencies OK')"
@@ -152,7 +152,7 @@ python .\wca.py
 
 On the interactive CLI, check the **Tool Detection** table. Confirm required tools are `FOUND`, recommended integrations you installed are `FOUND`, and missing manual-only tools show expected optional coverage limitations. For release validation, install test dependencies explicitly with `.\install_dependencies.ps1 -TestDependencies` or `python -m pip install -r requirements-dev.txt` before running `python -m pytest -q`.
 
-**v2.2.2 validation:** `scripts/validate_windows.ps1` explicitly checks each Python exit code and fails closed if a command fails.
+**v2.2.3 validation:** `scripts/validate_windows.ps1` explicitly checks each Python exit code and fails closed if a command fails.
 
 ## 8. Take your ready-to-test snapshot
 
@@ -176,23 +176,23 @@ Then start with `python .\wca.py`, select **installable** or **portable** and **
 - `docs/installation.md` — concise built-in installation reference
 - `docs/optional-tools.md` — exhaustive per-tool instructions and tool override keys (updated for this release)
 - `docs/troubleshooting.md` — collector and evidence-handling issues
-- `docs/windows-validation.md` — Windows acceptance test plan (requires opt-in `requirements-dev.txt`)
+- `docs/assessment-integrity.md` — integrity verification and safe recovery
 - `tool_paths.example.json` — canonical detection override-key examples
 - `README.md` — commands and assessment lifecycle
 
-This guide describes the shipped v2.2.2 behavior; tool vendors' installers and support requirements can change. Confirm current upstream instructions and your organization's software approval policy before installing externally sourced binaries.
+This guide describes the shipped v2.2.3 behavior; tool vendors' installers and support requirements can change. Confirm current upstream instructions and your organization's software approval policy before installing externally sourced binaries.
 
-### v2.2.2 validation and readable backend
+### v2.2.3 validation and readable backend
 
 The local `tool_paths.json` file is expected when testers configure non-default tool locations; `scripts/validate_windows.ps1` will not reject that file. WCA release packaging still excludes it. For readable manual checks use `python .\wca.py --backend-action tool_readiness --backend-format text`. JSON remains the default for machine integrations.
 
-## v2.2.2 clean-install acceptance record
+## v2.2.3 clean-install acceptance record
 
 On the fresh Windows 11 VM, record the WCA `--version` output, PowerShell version, Python version, required/recommended Tool Readiness results, successful `validate_windows.ps1` completion, and a brief GUI workflow result. The tool displays detected utilities; where executable version metadata cannot be verified, it reports **Not verified** rather than guessing. Elevated permissions may be needed for native Windows capture and symlink security-regression tests; follow enterprise policy. Never package `tool_paths.json`, tester private paths, output folders, or target binaries with WCA.
 
-See [Windows Acceptance](windows-validation.md) for the two-machine test plan and [GUI Guide](gui-guide.md) for complete browser workflow controls.
+See [Assessment Integrity](assessment-integrity.md) for verification guidance and [GUI Guide](gui-guide.md) for complete browser workflow controls.
 
-## First-time tester decision path (v2.2.2)
+## First-time tester decision path (v2.2.3)
 
 Start with **Tool readiness** after installing Python dependencies. Required utilities should be available before assessment; missing recommended integrated tools reduce only relevant coverage and should be installed when their analysis applies. Optional/manual tools such as Ghidra are not prerequisites for a static assessment. The status shown by Tool Readiness reports discovery, not the test coverage actually collected by an assessment. Use collection coverage and module status reports for that distinction.
 

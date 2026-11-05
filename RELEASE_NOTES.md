@@ -1,45 +1,42 @@
-# WinClientAssess (WCA) v2.2.2 — Production Release
+# WinClientAssess v2.2.3 — Release Notes
 
-![WinClientAssess Windows Client Assessment release image](https://github.com/Mr-Breeden/WinClientAssess/releases/download/v2.2.2/WinClientAssess-Security-Dashboard.png)
+**Platform:** Windows 11 x64  
+**Framework version:** 2.2.3  
+**Status:** GitHub release package prepared from the Windows-accepted p20 RC1 candidate.
 
-<!-- Banner is a planned release asset URL. It will render only after publishing the v2.2.2 release and uploading the approved PNG under that exact filename. -->
+This release focuses on reducing repetitive manual review and improving the traceability of thick-client security evidence. The local GUI and CLI support Static and tester-controlled Full assessments, Guided Runtime observations, independent TC/WCR decisions, integrity checks, and a privacy-sanitized Client Appendix.
 
-**Framework:** `2.2.2` · **Methodology:** `1.9` · **Artifact catalog:** `2.0` · **Platform:** Windows 11
+## Highlights
 
-WCA supports authorized static and full security assessments of Windows MSI/EXE and portable thick-client applications. This release improves tester setup, evidence review and workflow clarity while preserving established collection, Guided Runtime, and Client Appendix functionality.
-
-## What's improved
-
-- **Tool Readiness:** Set existing supported tool executable locations through the GUI; save, verify, or remove local overrides without downloading programs.
-- **Testing Queue report viewer:** Open linked reports inline, search literal terms, jump between matches, and copy paths or optional read-only PowerShell search commands. Clipboard search is enabled only after a search term is supplied.
-- **Evidence integrity awareness:** The viewer reminds testers that modifying collected originals can invalidate protected assessment evidence.
-- **Usability and applicability:** Clearer assessment-start validation, Static-versus-runtime progress, MSI review shortcuts, and explanations of excluded manual cases.
-- **Retained workflows:** Windows UAC elevation, Full/Static assessment modes, target-scoped collection, Guided Runtime, independent manual/WCR reviews, verification and privacy-conscious Client Appendix generation.
-
-## Validation
-
-The underlying production build completed 515 portable regressions in three nonoverlapping batches (172 + 172 + 171), source/ZIP audits and clean-extraction checks in the previous build environment. A full Windows 11 v2.2.2 assessment and Client Appendix were subsequently tested by the assessor with **no issues reported**. Every recorded reviewer answer in that assessment was synthetic test input; it does **not** substantiate actual vulnerabilities in the assessed application.
-
-This GitHub-upload tester distribution preserves functional collectors and workflows from that tested build. The final archive additionally simplifies release history, removes a stale version label from generated HTML instructions, and updates onboarding documentation. The revised ZIP received clean-extraction and portable smoke checks. Full Windows release-script regression tests require the original full-source archive and are not claimed as re-run here.
+- **Evidence-first review:** Selected network endpoints, filesystem/storage ACLs, registry/pipe permissions, and runtime events appear alongside the relevant procedure, rather than unrelated report excerpts. ACL panels distinguish collected results from optional live verification.
+- **Contextual guidance:** CFG, ASLR, DEP, ACL, IPC and other example interpretations appear within the applicable test steps; the WinDbg, Ghidra and Frida Getting Started guides appear in TC-AR-003 Step 5.
+- **Network WCR consolidation:** Equivalent IPv4 and IPv6 wildcard bindings share a review, while per-family endpoint evidence and historical tester dispositions remain intact. A merged review requires an explicit decision.
+- **PE hardening analysis:** DUMPBIN produces a concise run summary and exportable raw verification ZIP; missing metadata remains a review observation, not a confirmed exploitable condition.
+- **Secrets and runtime signals:** Better structured-secret filtering, redacted persisted evidence, more accurate process/network correlation, and manual context for Windows Error Reporting events.
+- **Operations and provenance:** Tool Readiness official setup links, safer path resolution for verified files, improved collection provenance and recoverable tool-cleanup reporting, and a separately sanitized Client Appendix.
 
 ## Installation
 
-Extract `WCA-v2.2.2-Tester.zip` into a trusted folder on Windows 11 and run:
+Extract `WCA-v2.2.3-Tester.zip` on a trusted Windows 11 system, then run from PowerShell:
 
 ```powershell
 .\install_dependencies.ps1
 python .\wca.py --version
-python .\wca.py --gui
+python .\wca.py
 ```
 
-Approve the UAC prompt when appropriate. Keep the local GUI's `#session=` URL fragment private. Use the Tester Workspace for Guided Runtime, inline technical reports, manual testing and the Client Appendix. Prior-version assessments may be available for read-only verification, but new runtime collection requires a compatible same-version assessment.
+Use `--cli` for the terminal interface. Approve Windows UAC when required and keep the localhost GUI session URL private. See `README.md` and `docs/getting-started.md` for details.
 
-## Release files
+## Validation and scope
 
-- `WCA-v2.2.2-Tester.zip` — complete functional Windows tester distribution, including operational Python source, GUI, utility modules, documentation and PoC helper resources; **not** the developer regression suite.
-- `WinClientAssess-Security-Dashboard.png` — approved, version-free promotional banner. Displayed metrics are illustrative.
-- `WCA-v2.2.2-SHA256SUMS.txt` — hashes of included release assets.
+The assessor reported a successful Windows RC1 acceptance test. The p20 source baseline had 82 passing Python regression tests and 19 additional subtests, and the release package was audited separately. The distributed tester ZIP intentionally omits automated regression suites and historical patch/testing checklists. The source distribution retains developer tests. Release packaging does not assert that every optional third-party tool has been installed on every machine.
 
-The separately built `WCA-v2.2.2.zip` full-source/regression archive is **not** included in this upload bundle because its original bytes were not available for final repackaging. It must be added and checked independently before claiming a complete source + tester release set.
+WCA does not automatically confirm vulnerabilities. Review candidates, security hardening gaps and tester dispositions are distinct from independently established findings. Tester notes remain optional. Collected evidence should be independently verified under the appropriate trust context.
 
-Release tag, repository source update and GitHub publication require separate approval. Lee's optional recursive ACL enumeration suggestion is deferred and not part of v2.2.2.
+## Assets
+
+- `WCA-v2.2.3-Tester.zip` — operational Windows package.
+- `WCA-v2.2.3-Source.zip` — application source plus regressions.
+- `WCA-v2.2.3-SHA256SUMS.txt` — SHA-256 digest file.
+
+Historical development patches are not individual production releases and are not included as release assets.

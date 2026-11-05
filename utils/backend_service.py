@@ -1,4 +1,4 @@
-"""WCA v2.2.2 in-process backend contract for future local GUI adapters.
+"""WCA v2.2.3 in-process backend contract for future local GUI adapters.
 
 The loopback GUI adapter is separate; no target launch or automatic PoC invocation.
 The JSON-safe envelopes intentionally exclude raw manifest paths, secrets,
@@ -41,7 +41,7 @@ def envelope(ok: bool, code: str, message: str, data: dict | None = None,
             'data': data if data is not None else {}, 'errors': errors or []}
 
 
-def capabilities(version: str = '2.2.2') -> dict[str, Any]:
+def capabilities(version: str = '2.2.3') -> dict[str, Any]:
     return {
         'framework': 'WCA', 'version': version, 'api_schema': API_SCHEMA,
         'target_types': list(SUPPORTED_TARGETS), 'assessment_modes': list(SUPPORTED_MODES),
@@ -87,7 +87,7 @@ def _verification_summary(result: dict) -> dict:
             'damaged_counts': {name: len(items) for name, items in result.get('damaged', {}).items()}}
 
 
-def _status(root: Path, current_version: str = '2.2.2') -> dict:
+def _status(root: Path, current_version: str = '2.2.3') -> dict:
     info = describe_assessment(root)
     data = {'kind': info.get('kind', 'unknown'), 'status': info.get('status', 'UNKNOWN'),
             'stage': info.get('stage', 'unknown'), 'recovery_action': info.get('action', 'NONE'),
@@ -139,9 +139,20 @@ def _review(root: Path) -> dict:
                       'changed_evidence': bool(item.get('changed_evidence')),
                       'artifacts': [Path(a).name for a in (item.get('artifacts') or [])]})
     items.sort(key=lambda row: (row['module'], row['title'], str(row['id'])))
+    # Historical observations are read-only. Do not leak private tester notes,
+    # archived evidence paths, or treat retired statuses as active decisions.
+    retired = [
+        {'id': str(rec.get('id') or '')[:40],
+         'title': _safe(rec.get('title'))[:180],
+         'module': _safe(rec.get('source_module'))[:90],
+         'previous_status': str(rec.get('status') or 'UNKNOWN')[:32],
+         'retired_at': str(rec.get('retired_at') or '')[:40]}
+        for rec in state.get('retired', []) if isinstance(rec, dict)
+    ]
     summary = counts(state)
     return {'total': len(items), 'pending': summary['PENDING'],
-            'by_disposition': {key: summary[key] for key in DISPOSITIONS}, 'items': items}
+            'by_disposition': {key: summary[key] for key in DISPOSITIONS},
+            'items': items, 'retired': retired}
 
 
 def _require_verified(root: Path) -> AssessmentState:
@@ -198,7 +209,7 @@ def _commit_review(root: Path, identifier: str, status: str, fingerprint: str, n
 
 class BackendService:
     """Backend facade; local GUI adapter may call it after authorization checks."""
-    def __init__(self, *, version: str = '2.2.2'):
+    def __init__(self, *, version: str = '2.2.3'):
         self.version = version
 
     def execute(self, action: str, assessment_dir: str | Path | None = None, **kwargs) -> dict[str, Any]:

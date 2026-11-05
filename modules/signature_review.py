@@ -55,9 +55,16 @@ def run_signature_review(target_file: Path, assessment_dir: Path, target_label: 
     ]
     (artifact_path(assessment_dir, "signature_review.txt")).write_text("\n".join(lines).rstrip()+"\n",encoding="utf-8")
     if status.lower()!="valid":
-        return {"status":"WARN","details":f"Signature status: {status}","findings":[{
+        message = str(data.get('StatusMessage') or '')
+        chain_issue = bool(data.get('SignerSubject')) and any(
+            term in message.lower() for term in ('certificate chain', 'trusted root', 'trust provider'))
+        description = ("A signer certificate is present, but trust-chain verification did not succeed. "
+                       "This does not establish an unsigned or tampered installer."
+                       if chain_issue else
+                       f"{target_label} did not return a Valid Authenticode signature status; review context.")
+        return {"status":"WARN","details":f"Signature status: {status}; {description}","findings":[{
             "title":"Digital Signature Requires Review","severity":"Informational",
-            "description":f"{target_label} did not return a Valid Authenticode signature status. This is a point of interest requiring context.",
+            "description":description,
             "evidence":f"Get-AuthenticodeSignature status: {status}",
             "recommendation":"Confirm target provenance and determine whether code signing is expected for the product or distribution channel."
         }]}

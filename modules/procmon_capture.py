@@ -301,6 +301,8 @@ def _run_procmon_capture_impl(
         f"  STDERR: {stop.get('stderr', '').strip()}",
     ]
 
+    if stop.get('returncode') != 0:
+        log.append('Stop command returned nonzero. Do not assume successful capture; backing-file existence and CSV export are validated below.')
     # Give Procmon a moment to flush the backing file.
     time.sleep(2)
     if interaction_error:
@@ -344,7 +346,14 @@ def _run_procmon_capture_impl(
         [procmon, "-openlog", str(pml), "-saveas", str(raw_csv), "-quiet"],
         timeout=export_timeout, output_fn=output_fn, verb="Still exporting Procmon evidence", interval=15,
     )
-    run_command([procmon, "-terminate", "-quiet"], timeout=60)
+    # A second terminate is defensive cleanup after exporting a stopped trace.
+    # Procmon may return nonzero when no instance remains; retain the original
+    # provenance failure and explicitly explain whether it affected evidence.
+    cleanup = run_command([procmon, "-terminate", "-quiet"], timeout=60)
+    cleanup_code = cleanup.get('returncode')
+    log += ["", "Post-export Procmon cleanup:",
+            f"  Return code: {cleanup_code}",
+            "  Interpretation: Defensive termination after CSV export. A nonzero status may indicate no remaining Procmon process; evaluate CSV export and sanitization independently."]
 
     log += [
         "", "CSV export command:",
@@ -430,7 +439,7 @@ def _run_procmon_capture_impl(
         + (f"; {interaction_error}" if interaction_error else "")
     )
     return {
-        "status": "WARN" if sanitation["redaction_count"] or interaction_error else "PASS",
+        "status": "WARN" if interaction_error else "PASS",
         "details": details,
         "csv_path": str(csv_path),
         "pml_path": None,

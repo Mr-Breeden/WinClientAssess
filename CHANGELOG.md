@@ -2,6 +2,14 @@
 
 Stable production releases only. Development milestones, release candidates and internal test patches remain in repository history rather than this public release summary.
 
+## v2.2.3 — 2026-11-04
+
+- Added evidence-first selected-target inspection for network endpoints, storage/file ACLs, configurations, and runtime observations, with interpretation placed in the applicable procedure step.
+- Consolidated equivalent IPv4/IPv6 network WCR candidates while retaining historical reviewer decisions independently.
+- Improved CFG/ASLR/DEP and DUMPBIN analysis usability, redacted structured-secret review, tool setup guidance, and collection provenance.
+- Strengthened GUI report navigation, privacy-safe path actions, runtime correlation and sanitized client exports.
+- RC1 Windows acceptance was reported successful; release artifact verification was performed separately.
+
 ## v2.2.2 — 2026-10-22
 
 - Improved first-time tool configuration through Tool Readiness, with persisted executable overrides and clear verification feedback.

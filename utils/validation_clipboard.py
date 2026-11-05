@@ -11,7 +11,7 @@ import os
 # These exact prefixes are emitted by contextual_checks and are read-only
 # inspection commands except for explicitly tester-operated benign lab probes.
 _COMMAND_PREFIXES = (
-    'get-', 'import-csv ', 'test-', 'icacls ', 'sc.exe ',
+    'get-', 'select-string ', 'import-csv ', 'test-', 'icacls ', 'sc.exe ',
     'handle64.exe ', 'handle.exe ', 'powershell ', 'python ', '& ', '$',
 )
 

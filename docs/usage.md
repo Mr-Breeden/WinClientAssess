@@ -5,17 +5,17 @@ WCA supports interactive and CLI-driven static/full Windows client assessments. 
 ## Local browser GUI
 
 ```powershell
-python .\wca.py --gui
+python .\wca.py
 # Alternate loopback port:
-python .\wca.py --gui --port 9002
+python .\wca.py --port 9002
 ```
 
-GUI runs only on `127.0.0.1`. Full assessments and Guided Runtime now run in a background Python worker with explicit browser checkpoints and live status; no additional terminal is opened. GUI use on Windows requires acceptance testing; see [GUI guide](gui-guide.md). `--no-gui` continues to mean **disable native file pickers in the CLI** and is not a synonym for `--gui`.
+A bare invocation launches the local browser interface; `--cli` selects the terminal workflow, while `--gui` is retained only as a compatibility alias. GUI runs only on `127.0.0.1`. Full assessments and Guided Runtime now run in a background Python worker with explicit browser checkpoints and live status; no additional terminal is opened. GUI use on Windows requires acceptance testing; see [GUI guide](gui-guide.md). `--no-gui` continues to mean **disable native file pickers in the CLI** and is not a synonym for `--gui`.
 
-## Interactive workflow
+## Interactive CLI workflow
 
 ```powershell
-python .\wca.py
+python .\wca.py --cli
 ```
 
 The main menu provides Start New Assessment, Assessment Status, Guided Tester Review, Guided Runtime Observation, Export Client Appendix, and Exit. Native Windows file/folder pickers are used when available; `--no-gui` forces text prompts.
@@ -123,10 +123,10 @@ Cross-version resume remains conservative.
 ## Guided Runtime Observation
 
 ```powershell
-python .\wca.py --guided-runtime C:\Assessments\Client-Full
+python .\wca.pyded-runtime C:\Assessments\Client-Full
 ```
 
-Eligibility requires a completed, integrity-PASS full assessment created by the active framework version. The tester exercises applicable workflows and presses **Enter once** when finished. Raw/full-host capture remains temporary; only target-scoped sanitized evidence is retained.
+Eligibility requires a completed, integrity-PASS full assessment created by the active framework version. In CLI mode, the tester exercises applicable workflows and presses **Enter once** when finished. In the browser GUI, use **Stop Guided Runtime Observation** instead. Raw/full-host capture remains temporary; distinct sanitized session evidence is retained in integrity-protected session archives starting with p11.
 
 ## Guided Tester Review
 
@@ -169,4 +169,4 @@ For a read-only frontend, use `python .\wca.py --backend-action capabilities` an
 
 ### Windows Administrator privilege preflight
 
-On Windows, `python .\wca.py --gui` requests UAC elevation at startup when launched from a normal user console. UAC approval launches a new WCA process using the current Python interpreter, same arguments, and current working directory; use the new elevated console's private GUI URL. Canceling UAC cleanly exits without starting the GUI. Full-mode CLI and standalone Guided Runtime request elevation as needed; background GUI workers do not invoke UAC. Read-only CLI operations, `--help`, `--version`, and static-mode CLI do not require Administrator privileges. If the elevated token is still unavailable, WCA refuses to enter a UAC prompt loop.
+On Windows, `python .\wca.py` requests UAC elevation at startup when launched from a normal user console. UAC approval launches a new WCA process using the current Python interpreter, same arguments, and current working directory; use the new elevated console's private GUI URL. Canceling UAC cleanly exits without starting the GUI. Full-mode CLI and standalone Guided Runtime request elevation as needed; background GUI workers do not invoke UAC. Read-only CLI operations, `--help`, `--version`, and static-mode CLI do not require Administrator privileges. If the elevated token is still unavailable, WCA refuses to enter a UAC prompt loop.

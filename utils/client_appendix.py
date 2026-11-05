@@ -112,7 +112,7 @@ def _field(text: str, key: str, default: str = "Not recorded") -> str:
     return found.group(1).strip() if found else default
 
 
-def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports: dict[str, str] | None = None, manual_notes: list[dict] | None = None) -> str:
+def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports: dict[str, str] | None = None, manual_notes: list[dict] | None = None, available_reports: set[str] | None = None) -> str:
     """Render a client-facing technical overview using only allowlisted report text.
 
     This is an evidence navigation and context summary, not a finding engine.
@@ -120,6 +120,7 @@ def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports:
     """
     reports = reports or {}
     manual_notes = manual_notes or []
+    available_reports = available_reports or set()
     profile = reports.get('application_profile.txt', '')
     coverage = reports.get('coverage_summary.txt', '')
     services = reports.get('services_review.txt', '')
@@ -152,6 +153,16 @@ def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports:
         return ('<article class="panel surface-panel"><h3>' + _esc(title) + '</h3><p>' + body + '</p>'
                 + ('<div class="support-links">' + links + '</div>' if links else '') + '</article>')
 
+    # Bounded interpretation cues help client readers distinguish a detected
+    # condition from a proven trust-boundary break. They are not risk scores.
+    context_by_module = {
+        'Services Review': 'An unquoted or unusual service path requires a writable candidate location and an actual privileged execution consequence before reporting.',
+        'Privilege Boundary Review': 'Confirm effective lower-trust control and a privileged consumer; service and ACL reviews may concern the same underlying object.',
+        'DLL Search Review': 'A missing DLL lookup alone is insufficient. Confirm an accessible candidate directory and a real load in the relevant process context.',
+        'PE Security Review': 'Missing or partial mitigation metadata is a hardening observation. Independently verify the binary and applicability before deciding reportability.',
+        'IPC / Named Pipe Review': 'Pipe visibility or broad transport permissions alone do not prove unauthorized operations.',
+        'Network Surface Review': 'A listener alone does not establish external reachability or broken authorization.',
+    }
     table_blocks = []
     for group, group_items in buckets.items():
         if not group_items:
@@ -162,15 +173,28 @@ def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports:
             # never reveal internal/withheld evidence filenames to the client.
             source_reports = item.get('artifacts') if isinstance(item.get('artifacts'), list) else []
             linked = [name for name in source_reports if isinstance(name, str) and name in evidence]
-            support = (' '.join(elink(name) for name in dict.fromkeys(linked)) if linked else
-                       'Detailed supporting evidence is not included in this sanitized appendix; '
-                       'consult the separate penetration-test report.')
-            rows.append('<tr><td>' + _esc(item.get('source_module') or 'Unspecified area') + '</td><td>'
-                        + _esc(item.get('title') or 'Observation') + '</td><td>'
+            if linked:
+                support = '<span class="evidence-state evidence-included">Evidence Included</span> ' + ' '.join(elink(name) for name in dict.fromkeys(linked))
+            elif any(name in available_reports for name in source_reports if isinstance(name, str)):
+                support = ('<span class="evidence-state evidence-excluded">Intentionally Excluded</span> '
+                           'Sensitive or non-approved supporting evidence was withheld from this sanitized appendix; consult the separate report.')
+            else:
+                support = ('<span class="evidence-state evidence-unavailable">Evidence Unavailable</span> '
+                           'No linked approved technical report was available in this assessment.')
+            reference = str(item.get('id') or '')
+            source_record = str(item.get('source_record') or '')
+            # Both IDs are stable review/evidence references. Do not export notes,
+            # fingerprints, test credentials, local paths or internal reviewer state.
+            ref_label = reference + ((' · ' + source_record) if source_record else '')
+            note = context_by_module.get(str(item.get('source_module') or ''), '')
+            observation = (_esc(item.get('title') or 'Observation') +
+                           ('<small class="observation-context">' + _esc(note) + '</small>' if note else ''))
+            rows.append('<tr><td>' + _esc(ref_label) + '</td><td>' + _esc(item.get('source_module') or 'Unspecified area') + '</td><td>'
+                        + observation + '</td><td>'
                         + _esc('Reviewed' if item.get('status') == 'VALIDATED' else 'Informational')
                         + '</td><td>' + support + '</td></tr>')
         table_blocks.append('<details class="review-area"><summary>' + _esc(group) + ' <span class="count">' + str(len(group_items))
-                            + '</span></summary><div class="table-scroll"><table><thead><tr><th>Source area</th><th>Observation</th><th>Review status</th><th>Approved supporting evidence</th></tr></thead><tbody>'
+                            + '</span></summary><div class="table-scroll"><table><thead><tr><th>WCR / source reference</th><th>Source area</th><th>Observation</th><th>Review status</th><th>Approved supporting evidence</th></tr></thead><tbody>'
                             + ''.join(rows) + '</tbody></table></div></details>')
     # Explicit client-facing notes are independent of report allowlist. Review
     # candidate and manual-case notes never copy private tester notes/refs.
@@ -208,7 +232,7 @@ def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports:
               ('application_profile.txt', 'services_review.txt'))
         + panel('Privilege and writable paths', 'Privileged services: <strong>' + _esc(_field(services, 'Privileged services'))
               + '</strong>. Broad-write ACL matches: <strong>' + _esc(write_count) + '</strong>. '
-              'Potential trust boundaries require manual effective-permission checks.',
+              'Potential trust boundaries require manual effective-permission checks. Related service and permission observations can overlap.',
               ('permissions_review.txt', 'services_review.txt'))
         + panel('Network footprint', 'Listening or bound endpoints: <strong>' + _esc(listener_count)
               + '</strong>. Active connections: <strong>' + _esc(_field(network, 'Active connections')) + '</strong>. '
@@ -228,7 +252,7 @@ def _appendix_html(state: dict, items: list[dict], evidence: list[str], reports:
 nav{position:sticky;top:0;z-index:5;background:var(--panel);border-bottom:1px solid var(--line)}nav .container{display:flex;align-items:center;gap:24px;padding-top:12px;padding-bottom:12px;overflow-x:auto;white-space:nowrap;font-size:12px;font-weight:750}
 main{padding-top:26px;padding-bottom:55px}h2{font-size:20px;margin:0 0 10px}h3{font-size:15px;margin:0 0 10px}p{margin:0 0 12px}.section{margin-top:32px}.section-intro{max-width:760px}
 .summary-strip .metric{background:var(--panel);border:1px solid var(--line)}.summary-strip .metric strong{font-size:clamp(15px,2vw,24px);max-width:100%;overflow-wrap:anywhere;word-break:break-word}.grid{display:grid;gap:14px}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}.surface-panel{border-top:3px solid var(--accent)!important}.support-links{display:flex;gap:6px;flex-wrap:wrap;margin-top:15px}
-.evidence-link{display:inline-block;border:1px solid var(--line);background:var(--panel2);padding:5px 9px;border-radius:7px;font-size:12px;overflow-wrap:anywhere}.review-area{padding:12px 16px;margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:10px}.review-area summary{cursor:pointer;font-weight:800;list-style-position:inside}.count{float:right;padding:0 9px;background:var(--panel2);border-radius:18px;color:var(--muted)}.table-scroll{overflow-x:auto;margin-top:12px}table{width:100%;border-collapse:collapse;min-width:610px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--panel2)}td{overflow-wrap:anywhere}
+.observation-context{display:block;color:var(--muted);font-size:12px;line-height:1.45;margin-top:6px}.evidence-state{display:inline-block;padding:3px 7px;border-radius:6px;font-size:11px;font-weight:700;margin-right:5px}.evidence-included{color:#7fdfb6;border:1px solid #248668}.evidence-excluded{color:#bad1e8;border:1px solid #6e839a}.evidence-unavailable{color:#f5c777;border:1px solid #b17f27}.evidence-link{display:inline-block;border:1px solid var(--line);background:var(--panel2);padding:5px 9px;border-radius:7px;font-size:12px;overflow-wrap:anywhere}.review-area{padding:12px 16px;margin:10px 0;background:var(--panel);border:1px solid var(--line);border-radius:10px}.review-area summary{cursor:pointer;font-weight:800;list-style-position:inside}.count{float:right;padding:0 9px;background:var(--panel2);border-radius:18px;color:var(--muted)}.table-scroll{overflow-x:auto;margin-top:12px}table{width:100%;border-collapse:collapse;min-width:610px}th,td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:var(--panel2)}td{overflow-wrap:anywhere}
 .evidence-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:0;list-style:none}.evidence-list li a{display:block}.footer{border-top:1px solid var(--line);font-size:12px;color:var(--muted);padding:20px 0 40px}.safety-note p{margin:6px 0 0}.metadata{display:flex;flex-wrap:wrap;gap:8px;margin-top:15px}.metadata span{padding:4px 10px;border:1px solid #53667f;border-radius:99px;font-size:12px;color:#d6e3f1}
 @media(max-width:780px){.two,.three,.evidence-list{grid-template-columns:1fr}.container{padding:0 16px}nav .container{gap:14px}}
 @media print{nav{display:none}.masthead p,.masthead .subline,.metadata span{color:#222!important}a{color:#222!important}.review-area{break-inside:avoid}}
@@ -242,8 +266,8 @@ main{padding-top:26px;padding-bottom:55px}h2{font-size:20px;margin:0 0 10px}h3{f
 <main class="container"><section id="overview"><div class="summary-strip">
 <div class="metric"><span>Collection coverage</span><strong>{_esc(grade)}</strong></div><div class="metric"><span>Reviewed observations</span><strong>{len(relevant)}</strong></div><div class="metric"><span>Installed services</span><strong>{_esc(service_count)}</strong></div><div class="metric"><span>Bound network endpoints</span><strong>{_esc(listener_count)}</strong></div>
 </div><div style="margin-top:18px">{note}</div></section>
-<section id="footprint" class="section"><h2>Observed technical footprint</h2><p class="section-intro">Information below comes from approved, sanitized technical reports. Counts reflect what was observed, not a full security verdict.</p><div class="grid three">{feature_panels}</div></section>
-<section id="observations" class="section"><h2>Reviewed security observations</h2><p class="section-intro">Grouped by affected review area. These are review records; refer to supporting evidence for the underlying observation and independently verify any impact.</p>
+<section id="footprint" class="section"><h2>Observed technical footprint</h2><p class="section-intro">Information below comes from approved, sanitized technical reports. The current coverage grade describes collection—not completed manual testing. Historical failed attempts and successful fallbacks remain documented in Collection Provenance; counts are not security verdicts.</p><div class="grid three">{feature_panels}</div></section>
+<section id="observations" class="section"><h2>Reviewed security observations</h2><p class="section-intro">Grouped by review area with WCR identifiers for traceability to the internal assessment. Related service, permissions, and privilege-boundary reviews can describe the same underlying condition; they are not separate confirmed vulnerabilities. Refer to linked evidence and independently verify impact.</p>
 {''.join(table_blocks) or '<div class="panel">No reviewed observations eligible for export.</div>'}</section>
 {client_note_section}
 <section id="evidence" class="section"><h2>Supporting technical reports</h2><p class="section-intro">Only approved, sanitized text artifacts are included. Each link opens an offline file shipped inside this ZIP.</p>
@@ -292,7 +316,8 @@ def export_client_appendix(root: Path, output_zip: Path) -> Path:
     included['assessment_report.html'] = _appendix_html(
         state, items, filenames, {name.partition('/')[2]: data.decode('utf-8')
                                   for name, data in included.items() if name.startswith('evidence/')},
-        manual_notes=approved_manual
+        manual_notes=approved_manual,
+        available_reports={rel.split('/', 1)[1] for rel in allowed if rel.startswith('reports/')}
     ).encode('utf-8')
     included['README.txt'] = (
         f"WCA v{state.get('framework_version') or 'unknown'} — CLIENT APPENDIX\n"

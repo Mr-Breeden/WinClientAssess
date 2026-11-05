@@ -1,5 +1,6 @@
 from utils.assessment_layout import artifact_path
 from pathlib import Path
+from modules.secrets_review import _eligible_text
 from collections import Counter, defaultdict
 import re
 import json
@@ -7,13 +8,13 @@ import xml.etree.ElementTree as ET
 from utils.report_format import header, section, kv, format_bytes
 
 EXTS = {
-    ".config",".json",".xml",".ini",".yaml",".yml",".toml",".properties",".conf",".cfg",".txt",
+    ".env",".config",".json",".xml",".ini",".yaml",".yml",".toml",".properties",".conf",".cfg",".txt",
     ".db",".sqlite",".sqlite3",".ps1",".bat",".cmd",".vbs",".js"
 }
 HIGH = {".pfx",".p12",".pem",".key",".cer",".crt",".db",".sqlite",".sqlite3"}
 
 CATEGORY = {
-    ".config":"Configuration", ".json":"Configuration", ".xml":"Configuration", ".ini":"Configuration",
+    ".env":"Configuration", ".config":"Configuration", ".json":"Configuration", ".xml":"Configuration", ".ini":"Configuration",
     ".yaml":"Configuration", ".yml":"Configuration", ".toml":"Configuration", ".properties":"Configuration",
     ".conf":"Configuration", ".cfg":"Configuration", ".txt":"Text/Other",
     ".ps1":"Script", ".bat":"Script", ".cmd":"Script", ".vbs":"Script", ".js":"Script",
@@ -102,7 +103,7 @@ def _configuration_indicators(rows):
     for row in rows:
         path = Path(row["path"])
         ext = path.suffix.lower()
-        if ext not in {".xml", ".config", ".json", ".ini", ".cfg", ".conf", ".properties", ".yaml", ".yml"}:
+        if ext not in {".env", ".xml", ".config", ".json", ".ini", ".cfg", ".conf", ".properties", ".yaml", ".yml"} and not _eligible_text(path):
             continue
         try:
             if path.stat().st_size > 2 * 1024 * 1024:
@@ -164,7 +165,9 @@ def run_configuration_review(roots, assessment_dir, file_inventory=None):
     for item in source_rows:
         path = str(item.get("path") or "")
         ext = str(item.get("extension") or Path(path).suffix).lower()
-        if ext in EXTS:
+        if ext in EXTS or _eligible_text(Path(path)):
+            if Path(path).name.casefold().startswith(".env"):
+                ext = ".env"
             rows.append({
                 "path": path,
                 "extension": ext,

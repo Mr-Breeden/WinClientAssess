@@ -64,7 +64,7 @@ from utils.operation_lock import assessment_operation, AssessmentBusyError
 from utils.backend_service import BackendService
 from utils.elevation import is_administrator, launch_elevated, ElevationError
 
-VERSION = "2.2.2"
+VERSION = "2.2.3"
 METHODOLOGY_VERSION = "1.9"
 ARTIFACT_CATALOG_VERSION = "2.0"
 PRODUCT_SHORT = "WCA"
@@ -184,7 +184,8 @@ def parse_args():
         help="Do not prompt for missing values (static mode only)",
     )
     parser.add_argument("--no-gui", action="store_true", help="Use text prompts instead of Windows file/folder dialogs")
-    parser.add_argument("--gui", action="store_true", help="Start the local browser interface (loopback only)")
+    parser.add_argument("--gui", action="store_true", help="Deprecated alias: browser mode is the default")
+    parser.add_argument("--cli", action="store_true", help="Use the terminal workflow without starting the browser interface")
     parser.add_argument("--port", type=int, default=9001, metavar="PORT", help="GUI loopback TCP port (default: 9001)")
     parser.add_argument(
         "--runtime-capture",
@@ -230,6 +231,7 @@ def parse_args():
     parser.add_argument("--client-appendix", metavar="ASSESSMENT_DIR", help="Export an integrity-verified, reviewed client appendix from a completed assessment")
     parser.add_argument("--appendix-output", metavar="ZIP_PATH", help="Destination for --client-appendix (must be outside assessment directory)")
     parser.add_argument("--guided-runtime", metavar="ASSESSMENT_DIR", help="Tester-driven runtime observation for a completed verified full assessment")
+    parser.add_argument("--runtime-workflow-label", default="General application use", choices=('General application use', 'Login and session', 'Logout and session expiry', 'File or configuration change', 'Network-dependent feature', 'Privileged helper interaction', 'Updater check', 'Other authorized workflow'), help="Non-sensitive workflow category for a Guided Runtime observation")
     parser.add_argument("--regenerate-reports", metavar="ASSESSMENT_DIR", help="Restore only tampered/missing derived reports after all primary evidence verifies")
     parser.add_argument("--backend-action", choices=["capabilities", "tool_readiness", "status", "verify", "review", "appendix_readiness"],
                         help="Emit one machine-readable, read-only backend response and exit (no GUI/server)")
@@ -755,7 +757,19 @@ def main():
     WEB_CONTROL = WebWorkerControl.from_environment()
     if args.gui_preselected_options and WEB_CONTROL is None:
         raise SystemExit("Preselected GUI options require an authenticated local GUI worker.")
-    if args.gui:
+    # Explicit command-line assessment flags keep their established automation semantics.
+    # A bare invocation uses the loopback browser; --cli bypasses the web server.
+    explicit_cli_operation = any((args.backend_action, args.target, args.installer,
+        args.status, args.review, args.guided_runtime, args.resume,
+        args.client_appendix, args.regenerate_reports, args.verify_assessment,
+        args.non_interactive, args.gui_preselected_options, args.no_gui,
+        args.mode, args.output, args.assessment_name, args.target_type,
+        args.primary_executable, args.application_dir, args.procmon_csv,
+        args.no_extract, args.no_filesystem_snapshot, args.runtime_capture,
+        args.surface_review))
+    if args.gui and args.cli:
+        raise SystemExit('Choose either --cli or --gui, not both.')
+    if args.gui or (not args.cli and not explicit_cli_operation and WEB_CONTROL is None):
         if args.backend_action or args.target or args.installer or args.status or args.review or args.guided_runtime or args.resume or args.client_appendix or args.regenerate_reports:
             raise SystemExit("--gui is a standalone launch mode; use the browser to start operations.")
         if not 1 <= args.port <= 65535:
@@ -813,6 +827,7 @@ def main():
                 result = run_guided_runtime(
                     runtime_root, version=VERSION, methodology_version=METHODOLOGY_VERSION,
                     catalog_version=ARTIFACT_CATALOG_VERSION,
+                    workflow_label=args.runtime_workflow_label,
                     input_fn=(lambda message: WEB_CONTROL.prompt(message)) if WEB_CONTROL else input,
                     web_control=WEB_CONTROL,
                 )

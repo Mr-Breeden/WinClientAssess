@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from modules.advanced_runtime_review import run_advanced_runtime_review
@@ -22,6 +23,8 @@ from modules.local_storage_review import run_local_storage_review
 from modules.permissions_review import run_permissions_review
 from modules.network_surface_review import run_network_surface_review
 from modules.runtime_process_review import run_runtime_process_review
+from modules.updater_review import discover_updater_candidates
+from modules.updater_security_review import run_updater_security_review
 from modules.snapshots import compare_snapshots
 from modules.test_cases import generate_test_cases
 from utils.acl import AclCache
@@ -45,6 +48,7 @@ RUNTIME_REFRESH_MODULES = (
     "Local Storage Review",
     "Permissions Review",
     "Application / Technology Profile",
+    "Updater Security Correlation",
 )
 
 
@@ -91,6 +95,53 @@ def _commit_staged_evidence(root: Path, staged: dict[str, str]) -> None:
         finally:
             if temp.exists():
                 temp.unlink(missing_ok=True)
+
+
+def _archive_guided_session(root: Path, staged: dict[str, str], summary: dict) -> str:
+    """Preserve target-scoped, already-sanitized per-session evidence.
+
+    Historical traces must never be treated as current process/socket/ACL state.
+    Every retained file enters the assessment integrity manifest during finalize.
+    """
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    base = root / "working" / "guided_runtime_sessions"
+    base.mkdir(parents=True, exist_ok=True)
+    ordinal = 1
+    while (base / f"session-{stamp}-{ordinal:02d}").exists():
+        ordinal += 1
+    session_id = f"session-{stamp}-{ordinal:02d}"
+    folder = base / session_id
+    folder.mkdir()
+    copied = []
+    # A session archive holds uniquely observed Procmon evidence, never the
+    # source full-host CSV/PML, executable payloads, credentials or snapshots.
+    for relative, path_value in (staged or {}).items():
+        if relative != "working/guided_runtime_target_events.csv" and not (
+            relative.startswith("reports/procmon_") and relative.endswith(".txt")
+        ):
+            continue
+        src = Path(path_value)
+        if not src.is_file() or src.is_symlink():
+            continue
+        name = src.name
+        dst = folder / name
+        shutil.copy2(src, dst)
+        copied.append(name)
+    # No original full-host trace is stored. All archive files are integrity
+    # protected and remain scoped to the captured observation time.
+    from utils.assessment_state import _atomic_json
+    _atomic_json(folder / "session_context.json", {
+        "schema_version": 1, "session_id": session_id,
+        "captured_at": summary.get("captured_at", ""),
+        "capture_status": (summary.get("capture") or {}).get("status", "UNKNOWN"),
+        "events": (summary.get("counts") or {}).get("procmon_target_events", 0),
+        "workflow_context": str(summary.get("workflow_label") or "Unspecified workflow"),
+        "archived_files": copied,
+        "historical_only": True,
+    })
+    summary["session_id"] = session_id
+    summary["archived_evidence"] = bool(copied)
+    return session_id
 
 
 def _expand_profile(value):
@@ -258,6 +309,23 @@ def _integrate_runtime_analysis(root: Path, reporter: AssessmentReporter, result
     _replace_module_result(reporter, "Attack Surface Correlations", known)
     output_fn(f"[✓] Attack-surface correlations refreshed: {len(known.get('records') or [])} scoped indicator(s)")
 
+    # Re-run the updater review when an updater is known from the verified
+    # installation differential. Newly observed update-check activity can then
+    # populate updater runtime/staging reports. No speculative updater targets.
+    updater_result = None
+    updater_candidates = discover_updater_candidates(
+        file_inventory=[], diff=diff, seed_candidates=[],
+        exclude_paths=exclude_paths, target_inventory=None,
+    )
+    if updater_candidates:
+        updater_result = run_updater_security_review(
+            root, updater_candidates, diff, post, procmon_data,
+            runtime_process_result.get("runtime_processes") or [],
+            mode="full", filesystem_evidence=bool(pre and post), acl_cache=acl_cache,
+        )
+        _replace_module_result(reporter, "Updater Security Correlation", updater_result)
+        output_fn("[✓] Updater Security Correlation refreshed from this observation session")
+
     profile = run_application_profile(
         root, "full", {}, {}, {}, file_inventory, {}, {}, {}, diff, runtime_targets,
         runtime_process_result.get("runtime_processes") or [], network_result, ipc_result, [], local_storage_result,
@@ -275,6 +343,7 @@ def _integrate_runtime_analysis(root: Path, reporter: AssessmentReporter, result
         "known": known,
         "local_storage": local_storage_result,
         "permissions": permissions_result,
+        "updater": updater_result,
         "profile": profile,
         "diff": diff,
     }
@@ -282,18 +351,21 @@ def _integrate_runtime_analysis(root: Path, reporter: AssessmentReporter, result
 
 def run_guided_runtime(root: Path, *, version: str, methodology_version: str,
                        catalog_version: str, input_fn=input, output_fn=print,
-                       interactive_collectors: bool = True, web_control=None) -> dict:
+                       interactive_collectors: bool = True, web_control=None,
+                       workflow_label: str = 'General application use') -> dict:
     from utils.collection_provenance import session
     with session(Path(root).expanduser().resolve(), 'guided-runtime'):
         return _run_guided_runtime_impl(root, version=version,
             methodology_version=methodology_version, catalog_version=catalog_version,
             input_fn=input_fn, output_fn=output_fn,
-            interactive_collectors=interactive_collectors, web_control=web_control)
+            interactive_collectors=interactive_collectors, web_control=web_control,
+            workflow_label=workflow_label)
 
 
 def _run_guided_runtime_impl(root: Path, *, version: str, methodology_version: str,
                              catalog_version: str, input_fn=input, output_fn=print,
-                             interactive_collectors: bool = True, web_control=None) -> dict:
+                             interactive_collectors: bool = True, web_control=None,
+                             workflow_label: str = 'General application use') -> dict:
     root = Path(root).expanduser().resolve()
     state, before = validate_guided_runtime_eligibility(root, version)
 
@@ -332,10 +404,12 @@ def _run_guided_runtime_impl(root: Path, *, version: str, methodology_version: s
         # v1.7.2 deliberately has no tester workflow-status prompts. Coverage is
         # derived from observed telemetry, not from hotkeys or post-capture attestation.
         result["summary"]["checklist"] = {}
+        result["summary"]["workflow_label"] = workflow_label
 
         output_fn("[•] Committing target-scoped sanitized evidence and derived Procmon reports...")
+        _archive_guided_session(root, result.get("staged_evidence") or {}, result["summary"])
         _commit_staged_evidence(root, result.get("staged_evidence") or {})
-        output_fn("[✓] Target-scoped evidence committed; raw/full-host capture discarded")
+        output_fn("[✓] Current evidence updated and sanitized per-session evidence archived; raw/full-host capture discarded")
 
         reporter = AssessmentReporter(
             root,

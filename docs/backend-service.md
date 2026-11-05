@@ -1,4 +1,4 @@
-# WCA v2.2.2 — Backend Service and Local GUI
+# WCA v2.2.3 — Backend Service and Local GUI
 
 ## Scope and non-goals
 
@@ -82,4 +82,4 @@ Regression tests cover JSON safety, absence of tester paths, existing assessment
 
 ## v2.1.0 local GUI transport
 
-Use `python .\wca.py --gui` (default `127.0.0.1:9001`), or `--port 9002`. The stdlib HTTP adapter is described in [`gui-guide.md`](gui-guide.md). JSON backend schema remains `1.0`. Explicit GUI mutations require a session token, same-origin local request, tester confirmation, per-assessment lock and backend integrity gates. GUI collection now redirects the original engine through an in-browser checkpoint protocol; the separate CLI remains available for terminal use.
+Use `python .\wca.py` (GUI is the default, at `127.0.0.1:9001`), or `python .\wca.py --port 9002`. `--gui` remains a compatibility alias; use `--cli` for the terminal UI. The stdlib HTTP adapter is described in [`gui-guide.md`](gui-guide.md). JSON backend schema remains `1.0`. Explicit GUI mutations require a session token, same-origin local request, tester confirmation, per-assessment lock and backend integrity gates. GUI collection now redirects the original engine through an in-browser checkpoint protocol; the separate CLI remains available for terminal use.
