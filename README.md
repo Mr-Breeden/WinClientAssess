@@ -4,6 +4,10 @@
 
 WCA is a local Windows thick-client assessment framework for authorized MSI/EXE and portable-application testing. It combines static package review, tester-controlled full installation/runtime observation, scoped filesystem and registry inspection, PE and component analysis, a browser-based Tester Workspace, evidence provenance, and sanitized Client Appendix exports. The web interface is served only on localhost with a session-token URL. WCA never installs, authenticates to, or exploits the target for you.
 
+![WinClientAssess — Windows Client Assessment Framework](assets/WinClientAssess-Security-Dashboard.png)
+
+*Illustrative promotional dashboard artwork; numbers shown are examples, not actual assessment results.*
+
 ## Getting started
 
 1. Extract `WCA-v2.2.3-Tester.zip` to a trusted folder on Windows 11. Do not run inside the ZIP. See [Windows environment setup](docs/windows-environment-setup.md) for Python, 7-Zip, optional Sysinternals and VM preparation.
