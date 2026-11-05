@@ -1,6 +1,6 @@
 # WCA artifact policy
 
-**Current artifact catalog:** 2.0 (framework v2.2.2; historical 1.8 changes documented below)
+**Current artifact catalog:** 2.0 (framework v2.2.3; historical 1.8 changes documented below)
 
 WCA keeps an artifact only when it has a distinct tester, evidence, correlation, integrity, recovery or reproducibility purpose.
 
@@ -35,7 +35,7 @@ Portable assessment artifacts should not persist tester username/hostname, perso
 
 The GitHub source ZIP contains current source, canonical documentation, current regression tests, the current Windows validation script and operational `scripts/poc/` resources. It excludes generated/cache/build metadata, historical duplicate validation docs/scripts, prior release ZIP/checksum artifacts and temporary assessment output.
 
-`scripts/package_release.py` enforces an explicit allowlist and fails closed on unexpected carryover. The separate minimal tester ZIP excludes tests, development/packaging tools, machine-specific configuration and generated assessment evidence while retaining assessment functionality and tester PoC helpers.
+The GitHub tester ZIP uses an explicit release allowlist. It excludes automated regression suites, development checklists, machine-specific configuration and generated assessment evidence while retaining assessment functionality and optional PoC helpers.
 
 ### v2.1.0 collection provenance exception
 

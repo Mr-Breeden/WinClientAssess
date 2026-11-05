@@ -1,4 +1,4 @@
-"""WCA v2.2.2 loopback-only GUI adapter.
+"""WCA v2.2.3 loopback-only GUI adapter.
 
 No new collectors. Mutations are delegated to the v1.9.6-derived BackendService
 or to private Python workers, where tester checkpoints are acknowledged in the browser.
@@ -31,6 +31,7 @@ from utils.poc_playbooks import candidate_validation
 from utils.privacy import sanitize_report_text
 from utils.web_worker import atomic_json
 from utils.manual_test_workflow import read_manual_workflow, read_manual_detail, save_manual_decision, testing_queue
+from utils.pe_dumpbin_validation import PeDumpbinJobs
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ASSETS = PROJECT_ROOT / 'gui'
@@ -38,7 +39,8 @@ READ_ACTIONS = frozenset(('capabilities', 'tool_readiness', 'status', 'verify', 
 WRITE_ACTIONS = frozenset(('save_review', 'export_appendix', 'regenerate_reports'))
 REPORT_TYPES = frozenset(('.txt', '.md', '.html'))
 MAX_BODY = 32_768
-MAX_REPORT = 500_000
+MAX_REPORT = 2_000_000  # Bounded read-only GUI preview. Larger reports remain linked with a clear error.
+PE_DUMPBIN_JOBS = PeDumpbinJobs()
 HELP_DOCUMENTS = {
     'getting-started': 'getting-started.md',
     'windows-setup': 'windows-environment-setup.md',
@@ -68,7 +70,11 @@ def runtime_history(root: Path, verified: bool = False) -> dict:
         session = item.get('session') or {}
         counts_data = item.get('counts') or {}
         status = str(capture.get('status') or 'UNKNOWN')[:30]
-        rows.append({'captured_at': str(item.get('captured_at') or session.get('stopped_at') or '')[:40],
+        rows.append({'workflow_label': str(item.get('workflow_label') or 'Unspecified (legacy session)')[:55],
+                     'session_id': str(item.get('session_id') or '')[:55],
+                     'archived_evidence': bool(item.get('archived_evidence')),
+                     'historical_only': True,
+                     'captured_at': str(item.get('captured_at') or session.get('stopped_at') or '')[:40],
                      'capture_status': status,
                      'duration_seconds': session.get('capture_duration_seconds', 0),
                      'processing_seconds': session.get('processing_duration_seconds', 0),
@@ -130,8 +136,8 @@ def list_reports(root: Path) -> list[dict]:
     for child in directory.iterdir():
         if child.is_symlink() or not child.is_file() or child.suffix.lower() not in REPORT_TYPES:
             continue
-        if child.stat().st_size <= MAX_REPORT:
-            entries.append({'name': child.name, 'size': child.stat().st_size})
+        entries.append({'name': child.name, 'size': child.stat().st_size,
+                        'preview_truncated': child.stat().st_size > MAX_REPORT})
     return sorted(entries, key=lambda item: item['name'].casefold())[:250]
 
 
@@ -144,9 +150,119 @@ def read_report(root: Path, name: object) -> str:
     child = folder / name
     if folder.is_symlink() or child.is_symlink() or not child.is_file():
         raise ValueError('Report unavailable.')
-    if child.resolve().parent != folder.resolve() or child.stat().st_size > MAX_REPORT:
-        raise ValueError('Report is too large or outside the report directory.')
-    return sanitize_gui_text(child.read_text(encoding='utf-8', errors='replace'), MAX_REPORT)
+    if child.resolve().parent != folder.resolve():
+        raise ValueError('Report is outside the verified report directory.')
+    total = child.stat().st_size
+    # Large verified reports get a bounded, explicitly truncated preview rather
+    # than silently disappearing. Search applies only to visible preview text.
+    with child.open('rb') as stream:
+        content = stream.read(MAX_REPORT - 350).decode('utf-8', errors='replace')
+    if total > MAX_REPORT - 350:
+        content += ('\n\n[PREVIEW TRUNCATED: ' + str(total) + ' bytes total. '
+                    'Only the beginning of this integrity-protected report is displayed. '
+                    'Use Copy report path to inspect the full file locally; no original was modified.]')
+    return sanitize_gui_text(content, MAX_REPORT)
+
+
+
+
+# Ephemeral, authenticated TC-PE-001 helper. The authoritative report deliberately
+# contains privacy placeholders such as %USERPROFILE%; those paths are unsuitable
+# for actual DUMPBIN commands until expanded in the current local tester session.
+# Never write expanded paths to a report, assessment state, or client artifact.
+_PE_RECORD = re.compile(r'^\[PE-(\d{4,})\]\s+(.+)$')
+_PE_FIELD = re.compile(r'^\s+(ASLR|DEP/NX|CFG|Error)\s*:\s*(.*)$')
+_PE_PROFILE = re.compile(r'^%USERPROFILE%(?=\\|$)', re.I)
+_PE_ABSOLUTE = re.compile(r'^(?:[A-Za-z]:\\|\\\\)[^"<>|\r\n]+$')
+
+
+def resolve_pe_verification_path(value: str, profile: str | None = None) -> str | None:
+    """Resolve only WCA's exact, known profile placeholder; never arbitrary env vars.
+
+    Local commands require real paths. Percent/expansion/control metacharacters
+    are otherwise disallowed so a read-only report cannot inject CMD syntax.
+    """
+    value = str(value or '').strip()
+    if _PE_PROFILE.match(value):
+        if profile is None:
+            profile = os.environ.get('USERPROFILE', '')
+        profile = str(profile or '').strip().rstrip('\\/')
+        if not _PE_ABSOLUTE.fullmatch(profile) or any(c in profile for c in '%!^'):
+            return None
+        value = _PE_PROFILE.sub(lambda _: profile, value, count=1)
+    if not _PE_ABSOLUTE.fullmatch(value) or any(c in value for c in '%!^\x00') or len(value) > 2048:
+        return None
+    return value
+
+
+def resolve_assessment_pe_path(root: Path, value: str, profile: str | None = None) -> str | None:
+    """Resolve only the known extracted-installer suffix within this verified assessment.
+
+    Sanitized placeholder prefixes are not env variables and must never be
+    expanded with arbitrary process paths. Resolved paths remain ephemeral.
+    """
+    match = re.search(r'(?i)(?:^|\\)working\\extracted_installer\\(.+)$', value.strip())
+    if match:
+        parts = match[1].split('\\')
+        if not parts or any(part in ('', '.', '..') or ':' in part or '/' in part for part in parts):
+            return None
+        base = root / 'working' / 'extracted_installer'
+        candidate = base.joinpath(*parts)
+        if base.is_symlink() or candidate.is_symlink() or not candidate.is_file():
+            return None
+        if any(parent.is_symlink() for parent in candidate.parents if parent != root and root in parent.parents):
+            return None
+        if base.resolve() not in candidate.resolve().parents:
+            return None
+        return str(candidate)
+    # Existing profile-based resolution is retained for older reports, but
+    # non-assessment files are not auto-run by DUMPBIN without a verified source.
+    candidate = resolve_pe_verification_path(value, profile)
+    if not candidate:
+        return None
+    file = Path(candidate)
+    if file.is_symlink() or not file.is_file():
+        return None
+    try:
+        if root.resolve() not in file.resolve().parents:
+            return None
+    except OSError:
+        return None
+    return str(file)
+
+
+def parse_pe_verification_rows(report: str, profile: str | None = None, *, root: Path | None = None) -> dict:
+    """Return only verified-report PE rows and local paths for the session GUI."""
+    rows, current, seen, omitted = [], None, set(), 0
+    for line in report.splitlines():
+        match = _PE_RECORD.match(line)
+        if match:
+            path = (resolve_assessment_pe_path(root, match[2], profile) if root is not None
+                    else resolve_pe_verification_path(match[2], profile))
+            if not path or path.casefold() in seen:
+                current = None
+                omitted += 1
+                continue
+            seen.add(path.casefold())
+            current = {'id': 'PE-' + match[1], 'path': path,
+                       'aslr': '', 'dep': '', 'cfg': '', 'error': ''}
+            rows.append(current)
+            continue
+        if current is None:
+            continue
+        field = _PE_FIELD.match(line)
+        if field:
+            key = {'ASLR': 'aslr', 'DEP/NX': 'dep', 'CFG': 'cfg', 'Error': 'error'}[field[1]]
+            current[key] = field[2].strip()
+    return {'rows': rows[:2000], 'omitted': omitted + max(0, len(rows) - 2000)}
+
+
+def verified_pe_verification(root: Path) -> dict:
+    """Read-only and integrity gated, no modification to collected artifacts."""
+    if verify_assessment(root).get('status') != 'PASS':
+        raise ValueError('Assessment integrity must be PASS to prepare PE verification.')
+    report = read_report(root, 'binary_security_review.txt')
+    return parse_pe_verification_rows(report, root=root)
 
 
 
@@ -171,6 +287,7 @@ def review_condition_detail(root: Path, identifier: object) -> dict:
     # and evidence_guide.txt, without letting the browser execute a command.
     safe = lambda value, n=4500: sanitize_gui_text(value, n)
     commands = list(validation_commands(item, root))[:24]
+    from utils.contextual_checks import typed_steps
     return {
         'id': identifier,
         'title': safe(item.get('title'), 500),
@@ -181,6 +298,18 @@ def review_condition_detail(root: Path, identifier: object) -> dict:
         'changed_evidence': bool(item.get('changed_evidence')),
         'component': safe(item.get('component'), 650),
         'matching_events': item.get('occurrence_count', 1),
+        'network_bindings': [
+            {'family': safe(row.get('family'), 12),
+             'endpoint': safe(row.get('endpoint'), 150),
+             'source_record': safe(row.get('source_record'), 40)}
+            for row in (item.get('network_bindings') or [])[:8] if isinstance(row, dict)
+        ],
+        # Never return historical tester notes from retired sibling WCRs.
+        'merged_previous_decisions': [
+            {'id': safe(row.get('id'), 40), 'title': safe(row.get('title'), 200),
+             'status': safe(row.get('status'), 32)}
+            for row in (item.get('merged_previous_decisions') or [])[:8] if isinstance(row, dict)
+        ],
         'artifacts': [Path(str(a)).name for a in (item.get('artifacts') or [])][:30],
         'test_cases': [safe(case, 80) for case in (item.get('test_cases') or [])][:30],
         'notes': safe(item.get('notes'), 4000),
@@ -189,6 +318,7 @@ def review_condition_detail(root: Path, identifier: object) -> dict:
         'description': safe(item.get('description'), 4500),
         'prerequisites': safe(plan.get('prerequisites')),
         'commands': [safe(command, 3500) for command in commands],
+        'command_steps': [{**row, 'text': safe(row['text'], 3500)} for row in typed_steps(commands)],
         'manual_validation': safe(manual),
         'poc': {
             'resource': safe(plan.get('poc_resource'), 1200),
@@ -267,7 +397,7 @@ def _validated_job_inputs(payload: dict) -> tuple[Path, list[str], str]:
 
 class JobManager:
     """One CLI worker per assessment; never launches a target or PoC itself."""
-    def __init__(self, version: str = '2.2.2', catalog: RecentAssessments | None = None):
+    def __init__(self, version: str = '2.2.3', catalog: RecentAssessments | None = None):
         self.catalog = catalog or RecentAssessments()
         self.version = version
         self.jobs: dict[str, dict] = {}
@@ -286,7 +416,14 @@ class JobManager:
                     or data['data'].get('mode') != 'full'
                     or data['data'].get('integrity', {}).get('status') != 'PASS'):
                 raise ValueError('Guided Runtime requires an intact, completed assessment from the current release.')
-            argv = [sys.executable, str(PROJECT_ROOT / 'wca.py'), '--guided-runtime', str(root)]
+            workflow = payload.get('workflow_label') or 'General application use'
+            allowed = {'General application use', 'Login and session', 'Logout and session expiry',
+                       'File or configuration change', 'Network-dependent feature',
+                       'Privileged helper interaction', 'Updater check', 'Other authorized workflow'}
+            if not isinstance(workflow, str) or workflow not in allowed:
+                raise ValueError('Select an allowed, non-sensitive Guided Runtime workflow category.')
+            argv = [sys.executable, str(PROJECT_ROOT / 'wca.py'), '--guided-runtime', str(root),
+                    '--runtime-workflow-label', workflow]
             interactive = True
         elif kind == 'resume':
             root = safe_assessment_root(payload.get('assessment'))
@@ -446,7 +583,7 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
     def safe_action_error(route: str, payload: dict | None, exc: Exception) -> dict:
         """Stable, non-sensitive diagnostics without exposing local paths or notes."""
         operations = {'/api/manual-tests': 'Manual test decision', '/api/mutate': 'Assessment maintenance', '/api/select': 'Open assessment',
-                      '/api/start': 'Start assessment job', '/api/job/respond': 'Worker checkpoint',
+                      '/api/start': 'Start assessment job', '/api/pe-dumpbin/start': 'DUMPBIN CFG verification', '/api/job/respond': 'Worker checkpoint',
                       '/api/pick': 'Browse for a file or folder'}
         operation = operations.get(route, 'GUI action')
         if route == '/api/mutate' and isinstance(payload, dict):
@@ -496,6 +633,10 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                 code, message, guidance = ('TOOL_OVERRIDE_REJECTED',
                     'The tool override could not be saved or verified.',
                     'Confirm the selected executable path, then retry.')
+        elif route == '/api/pe-dumpbin/start' and ('dumpbin' in value or 'selection' in value or 'pe entries' in value):
+            code, message, guidance = ('PE_VERIFICATION_NOT_READY',
+                'DUMPBIN verification could not start with this PE selection.',
+                'Check that DUMPBIN is FOUND in Tool Readiness, PE file paths still exist, and the selection is 50 files or fewer.')
         elif 'already active' in value:
             code, message, guidance = ('ASSESSMENT_BUSY', 'Another operation is active for this assessment.',
                                        'Open the Assessment Worker to inspect its progress.')
@@ -597,6 +738,49 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                     root = safe_assessment_root(query.get('assessment'))
                     self._json(overview_snapshot(root, service))
                     return
+                if route == '/api/secret-indicators':
+                    from utils.secret_indicator_viewer import indicator_list
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, 'indicators': indicator_list(root)})
+                    return
+                if route == '/api/config-source-path':
+                    from utils.configuration_source_paths import resolve_configuration_artifact
+                    root = safe_assessment_root(query.get('assessment'))
+                    # Only files listed in the integrity-verified configuration report.
+                    if verify_assessment(root).get('status') != 'PASS':
+                        raise ValueError('Assessment integrity must be PASS to resolve a source path.')
+                    path = resolve_configuration_artifact(root, query.get('path'))
+                    self._json({'ok': True, 'path': str(path)})
+                    return
+                if route == '/api/target-evidence':
+                    from utils.target_evidence import stored_target_evidence
+                    root = safe_assessment_root(query.get('assessment'))
+                    target = query.get('target')
+                    report = query.get('report')
+                    # Existing ACL collection is the preferred evidence source,
+                    # even when the check's source was a differential inventory.
+                    stored = (stored_target_evidence(root, 'permissions_review.txt', target)
+                              if report != 'permissions_review.txt' and
+                              (root / 'reports' / 'permissions_review.txt').is_file() else {'found': False})
+                    if not stored.get('found'):
+                        stored = stored_target_evidence(root, report, target)
+                    self._json({'ok': True, **stored})
+                    return
+                if route == '/api/abbreviations':
+                    from modules.test_case_catalog import TEST_CASES
+                    definitions = {'IN':'Installer', 'TG':'Target', 'SG':'Signature', 'MS':'MSI',
+                        'PE':'Portable Executable', 'CF':'Configuration / Secrets', 'LS':'Local Storage',
+                        'FS':'Filesystem', 'RG':'Registry', 'SV':'Services', 'TS':'Scheduled Tasks',
+                        'PB':'Privilege Boundary', 'DR':'Drivers', 'PM':'Process Monitor',
+                        'DL':'DLL Search', 'AR':'Advanced Runtime', 'MC':'Memory Corruption',
+                        'NW':'Network', 'UP':'Updater', 'IP':'Interprocess Communication'}
+                    codes = sorted({row['id'].split('-')[1] for row in TEST_CASES})
+                    rows = [{'code': key, 'meaning': definitions.get(key, key), 'type': 'Test area'} for key in codes]
+                    rows = ([{'code':'WCA','meaning':'Windows Client Assessment', 'type':'Identifier'},
+                             {'code':'TC','meaning':'Test Case', 'type':'Identifier'},
+                             {'code':'WCR','meaning':'Guided Review Candidate', 'type':'Identifier'}] + rows)
+                    self._json({'ok': True, 'items': rows})
+                    return
                 if route == '/api/recent':
                     self._json({'ok': True, 'assessments': catalog.list_recent(jobs.list_jobs())})
                     return
@@ -608,6 +792,11 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                 if route == '/api/manual-tests':
                     root = safe_assessment_root(query.get('assessment'))
                     self._json({'ok': True, 'data': read_manual_workflow(root)})
+                    return
+                if route == '/api/manual-checks':
+                    from utils.test_case_checks import available_checks
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, 'data': available_checks(root, query.get('case_id', ''))})
                     return
                 if route == '/api/manual-test':
                     root = safe_assessment_root(query.get('assessment'))
@@ -647,6 +836,25 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                 if route == '/api/reports':
                     root = safe_assessment_root(query.get('assessment'))
                     self._json({'ok': True, 'reports': list_reports(root)})
+                    return
+                if route == '/api/pe-dumpbin/download':
+                    root = safe_assessment_root(query.get('assessment'))
+                    archive, filename = PE_DUMPBIN_JOBS.package(query.get('id', ''), root)
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/zip')
+                    self.send_header('Content-Disposition', 'attachment; filename="' + filename + '"')
+                    self.send_header('Cache-Control', 'no-store')
+                    self.send_header('Content-Length', str(len(archive)))
+                    self.end_headers()
+                    self.wfile.write(archive)
+                    return
+                if route == '/api/pe-dumpbin/status':
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, 'job': PE_DUMPBIN_JOBS.inspect(query.get('id', ''), root)})
+                    return
+                if route == '/api/pe-verification':
+                    root = safe_assessment_root(query.get('assessment'))
+                    self._json({'ok': True, **verified_pe_verification(root)})
                     return
                 if route == '/api/report':
                     root = safe_assessment_root(query.get('assessment'))
@@ -704,6 +912,62 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                             'next_step': 'Verify the current assessment state and integrity before retrying.'}
                     self._json(response, 200 if response['ok'] else 409)
                     return
+                if route == '/api/compare-assessments':
+                    from utils.assessment_compare import compare_assessments
+                    first = safe_assessment_root(payload.get('baseline'))
+                    second = safe_assessment_root(payload.get('comparison'))
+                    self._json({'ok': True, 'data': compare_assessments(first, second)})
+                    return
+                if route == '/api/config-open-location':
+                    from utils.configuration_source_paths import resolve_configuration_artifact
+                    root = safe_assessment_root(payload.get('assessment'))
+                    if verify_assessment(root).get('status') != 'PASS':
+                        raise ValueError('Assessment integrity must be PASS to open artifact location.')
+                    if os.name != 'nt':
+                        raise ValueError('Open File Location requires Windows Explorer.')
+                    source = resolve_configuration_artifact(root, payload.get('path'))
+                    subprocess.Popen(['explorer.exe', '/select,', str(source)], close_fds=True)
+                    self._json({'ok': True, 'message': 'Opened verified artifact location in Explorer.'})
+                    return
+                if route == '/api/secret-open-location':
+                    from utils.secret_indicator_viewer import indicator_source_path
+                    root = safe_assessment_root(payload.get('assessment'))
+                    identifier = payload.get('indicator')
+                    if not isinstance(identifier, str) or not identifier.startswith('SECRET-'):
+                        raise ValueError('Select a valid secret indicator.')
+                    if os.name != 'nt':
+                        raise ValueError('Open File Location requires Windows Explorer.')
+                    source = indicator_source_path(root, identifier)
+                    # Only a verified assessment-owned extracted file; never execute the DLL/EXE.
+                    subprocess.Popen(['explorer.exe', '/select,', str(source)], close_fds=True)
+                    self._json({'ok': True, 'message': 'Opened source file location in Explorer.'})
+                    return
+                if route == '/api/secret-context':
+                    from utils.secret_indicator_viewer import indicator_context
+                    root = safe_assessment_root(payload.get('assessment'))
+                    if not isinstance(payload.get('indicator'), str):
+                        raise ValueError('Select a valid secret indicator.')
+                    # An authorized tester selection displays the original locally.
+                    # All responses are no-store; never log or persist original values.
+                    self._json({'ok': True, 'data': indicator_context(root, payload['indicator'], reveal=True)})
+                    return
+                if route == '/api/pe-dumpbin/start':
+                    if payload.get('confirmed') is not True:
+                        raise ValueError('Explicit tester action required before running DUMPBIN.')
+                    root = safe_assessment_root(payload.get('assessment'))
+                    verified = verified_pe_verification(root)
+                    job = PE_DUMPBIN_JOBS.start(root, verified['rows'],
+                                                payload.get('scope', ''), payload.get('pe_id', ''))
+                    self._json({'ok': True, 'job': job})
+                    return
+                if route == '/api/manual-checks/run':
+                    from utils.test_case_checks import run_check
+                    if payload.get('confirmed') is not True:
+                        raise ValueError('Explicit tester action required for independent checks.')
+                    root = safe_assessment_root(payload.get('assessment'))
+                    result = run_check(root, payload.get('case_id', ''), payload.get('check_id', ''))
+                    self._json({'ok': True, 'data': result})
+                    return
                 if route == '/api/manual-tests':
                     if payload.get('confirmed') is not True:
                         raise ValueError('Explicit tester confirmation required.')
@@ -730,6 +994,12 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
                         raise ValueError('Not a structured WCA assessment.')
                     catalog.remember(root)
                     self._json({'ok': True, 'message': 'Assessment remembered locally.'})
+                    return
+                if route == '/api/recent/remove':
+                    if payload.get('confirmed') is not True:
+                        raise ValueError('Explicit confirmation is required to remove a recent entry.')
+                    catalog.remove(payload.get('path'))
+                    self._json({'ok': True, 'message': 'Recent-history reference removed; assessment files unchanged.'})
                     return
                 if route == '/api/start':
                     if payload.get('confirmed') is not True:
@@ -763,7 +1033,7 @@ def build_handler(*, token: str, version: str, jobs: JobManager, port: int,
     return GUIHandler
 
 
-def make_server(port: int = 9001, *, version: str = '2.2.2', jobs: JobManager | None = None,
+def make_server(port: int = 9001, *, version: str = '2.2.3', jobs: JobManager | None = None,
                 token: str | None = None, catalog: RecentAssessments | None = None) -> ThreadingHTTPServer:
     if not 0 <= port <= 65535:
         raise ValueError('Invalid port.')
@@ -785,7 +1055,7 @@ def make_server(port: int = 9001, *, version: str = '2.2.2', jobs: JobManager | 
     return server
 
 
-def serve_gui(port: int = 9001, version: str = '2.2.2'):
+def serve_gui(port: int = 9001, version: str = '2.2.3'):
     server = make_server(port=port, version=version)
     url = f'http://127.0.0.1:{server.server_port}/#session={server.wca_token}'
     print(f'WCA v{version} private GUI session URL: {url}')

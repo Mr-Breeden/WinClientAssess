@@ -2,6 +2,7 @@ from __future__ import annotations
 from utils.assessment_layout import artifact_path
 
 import ntpath
+import os
 from pathlib import Path
 from utils.windows_paths import as_list, extract_executable, parent_path
 from utils.acl import get_acl_summaries, broad_write_aces
@@ -210,6 +211,38 @@ def _candidate_paths(pre, post, diff=None, scope_roots=None, runtime_dll_records
                 path, "", "Filesystem added"
             )
 
+    # P17: inventory all application-owned directories in the filesystem differential,
+    # not just direct children of snapshot roots. Keep only established target scope.
+    for entry in added:
+        if not isinstance(entry, dict) or not entry.get("IsDirectory"):
+            continue
+        path = _filesystem_path(entry)
+        if path and strong_roots and _under_scope(path, strong_roots):
+            _add_candidate(rows, 11, "Application directory ACL", path, path, "", "Filesystem added")
+    for root in strong_roots:
+        _add_candidate(rows, 9, "Application ACL scope root", root, root, "", "Target scope")
+
+    # P17: bounded read-only live directory walk of established application roots.
+    # Never enumerate generic Program Files/ProgramData, reparse/symlink targets,
+    # or unrelated profile directories. Surface coverage limits in the report.
+    inventory_cap = 1200
+    inventory_count = 0
+    inventory_truncated = False
+    for root in strong_roots:
+        if not os.path.isdir(root) or os.path.islink(root):
+            continue
+        for base, dirs, _files in os.walk(root, followlinks=False):
+            dirs[:] = [item for item in dirs if not os.path.islink(os.path.join(base, item))]
+            if inventory_count >= inventory_cap:
+                inventory_truncated = True
+                break
+            if _under_scope(base, strong_roots):
+                _add_candidate(rows, 12, "Live application directory ACL", base, base, "", "Read-only live directory inventory")
+                inventory_count += 1
+    if stats is not None:
+        stats['live_inventory_directories'] = inventory_count
+        stats['live_inventory_truncated'] = inventory_truncated
+
     # Added security-sensitive files and their parent directories.
     for entry in added:
         if not isinstance(entry, dict) or entry.get("IsDirectory"):
@@ -367,6 +400,8 @@ def run_permissions_review(assessment_dir: Path, pre=None, post=None, diff=None,
         "Purpose:",
         "  Reviews ACLs associated with newly installed privileged components and security-relevant",
         "  files/directories identified by the installation filesystem differential.",
+        "  Application-scoped directory inventory uses snapshot evidence; paths beyond",
+        "  the snapshot or selected candidate cap are NOT covered. Validate effective access separately.",
         "  Broad-write matches are triage indicators and require effective-permission validation.",
         "",
         "ACL CANDIDATE SUMMARY",
@@ -376,7 +411,10 @@ def run_permissions_review(assessment_dir: Path, pre=None, post=None, diff=None,
         f"DLL-search-correlated directories   : {len(runtime_correlated)}",
         f"Total unique candidate paths        : {len(candidates)}",
         f"Candidate limit                     : {MAX_ACL_CANDIDATES}",
+        f"Unreviewed due to candidate cap      : {max(0, len(candidates)-len(selected))}",
         f"Paths selected for ACL review       : {len(selected)}",
+        f"Live application directories walked  : {triage_stats.get('live_inventory_directories', 0)}",
+        f"Live directory inventory truncated   : {triage_stats.get('live_inventory_truncated', False)}",
         f"Existing paths successfully located : {len(existing)}",
         f"Missing/unavailable paths            : {len(missing)}",
         f"Broad-write review matches           : {len(suspicious)}",

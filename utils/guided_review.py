@@ -45,6 +45,79 @@ CATEGORY_TESTS = {
 }
 
 
+
+# p16-p2: group related checks around a security investigation without
+# merging their independent manual completion/disposition records.
+INVESTIGATIONS = {
+    'TC-IN-001': 'Package provenance', 'TC-TG-001': 'Package provenance',
+    'TC-SG-001': 'Signing and trust', 'TC-MS-001': 'Installer execution',
+    'TC-PE-001': 'PE hardening',
+    'TC-CF-001': 'Sensitive data and local storage', 'TC-LS-001': 'Sensitive data and local storage',
+    'TC-FS-001': 'Object permissions', 'TC-RG-001': 'Object permissions',
+    'TC-SV-001': 'Privileged execution', 'TC-TS-001': 'Privileged execution',
+    'TC-PB-001': 'Privileged execution', 'TC-DR-001': 'Driver boundary',
+    'TC-PM-001': 'Runtime evidence',
+    'TC-DL-001': 'DLL search and loading',
+    'TC-AR-001': 'Runtime evidence', 'TC-AR-002': 'Runtime evidence',
+    'TC-AR-003': 'Runtime evidence', 'TC-AR-004': 'Runtime evidence',
+    'TC-MC-001': 'Native memory safety',
+    'TC-NW-001': 'Network service access', 'TC-NW-002': 'Network service access',
+    'TC-UP-001': 'Updater trust', 'TC-UP-002': 'Updater trust',
+    'TC-UP-003': 'Updater trust', 'TC-UP-004': 'Updater trust',
+    'TC-UP-005': 'Updater trust',
+    'TC-IP-001': 'Local IPC access', 'TC-IP-002': 'Local IPC access',
+}
+
+# These are discovery/validation relationships, not completion dependencies.
+# Retain the source-specific link as primary; add complementary validation
+# cases when present in the current assessment's actual checklist.
+CONDITION_LINKS = {
+    'Network Surface Review': ['TC-NW-002'],
+    'IPC / Named Pipe Review': [],  # both IPC checks already mapped
+    'Updater Security Correlation': ['TC-UP-003', 'TC-UP-004', 'TC-UP-005'],
+    'Permissions Review': ['TC-FS-001', 'TC-RG-001'],
+    'Privilege Boundary Review': ['TC-SV-001', 'TC-TS-001'],
+    'Services Review': ['TC-PB-001'],
+    'Scheduled Tasks': ['TC-PB-001'],
+    'Local Storage Review': ['TC-CF-001'],
+    'Configuration Review': ['TC-LS-001'],
+    'Secrets Review': ['TC-LS-001'],
+}
+
+
+def _route_candidate(root: Path, module: str, title: str = '', evidence: str = '') -> tuple[list[str], str]:
+    """Supplement existing routes only when evidence supports a test family.
+
+    Avoid using a title alone to declare a vulnerability or a test completed.
+    """
+    base = _applicable_test_links(root, module)
+    detail = (title + '\n' + evidence).lower()
+    extras = list(CONDITION_LINKS.get(module, ()))
+    if module == 'Permissions Review':
+        # Do not route a filesystem ACL candidate to registry solely because
+        # both tests use an access-control review.
+        extras = ['TC-RG-001'] if ('hkey_' in detail or 'registry' in detail or 'hkcu\\' in detail or 'hklm\\' in detail) else ['TC-FS-001']
+    elif module == 'Privilege Boundary Review':
+        extras = (['TC-SV-001'] if 'service' in detail else []) + (['TC-TS-001'] if 'schedul' in detail or 'task ' in detail else [])
+    elif module in ('Configuration Review', 'Secrets Review'):
+        extras = ['TC-LS-001'] if any(x in detail for x in ('appdata', 'programdata', 'local storage', 'user profile', 'user-writable')) else []
+    elif module == 'Local Storage Review':
+        extras = ['TC-CF-001'] if any(x in detail for x in ('secret', 'credential', 'password', 'private key', 'token')) else []
+    elif module == 'Updater Security Correlation':
+        extras = (['TC-UP-003'] if any(x in detail for x in ('staging', 'temporary', 'writable', 'acl', 'directory')) else []) + (['TC-UP-004'] if any(x in detail for x in ('http', 'tls', 'transport', 'endpoint')) else []) + (['TC-UP-005'] if any(x in detail for x in ('rollback', 'downgrade', 'version')) else [])
+    available = _available_cases(root)
+    linked = list(dict.fromkeys(base + [x for x in extras if x in available]))
+    return linked, (INVESTIGATIONS.get(linked[0], '') if linked else '')
+
+
+def _available_cases(root: Path) -> set[str]:
+    report = artifact_path(root, 'test_cases.txt')
+    if not report.is_file():
+        return set(INVESTIGATIONS)
+    content = report.read_text(encoding='utf-8', errors='replace')
+    return set(re.findall(r'^\[ \] (TC-[A-Z]+-\d+)\s+-', content, flags=re.M))
+
+
 def _applicable_test_links(root: Path, module: str) -> list[str]:
     """Only link checklist cases actually generated for this assessment.
 
@@ -211,6 +284,79 @@ def _canonical(value: Any) -> str:
     return value
 
 
+def _network_wildcard_group_key(item: dict) -> str:
+    """Only combine wildcard IPv4/IPv6 bindings with matching executable,
+    TCP/UDP transport and port. Loopback and distinct processes remain separate.
+    """
+    if item.get('source_module') != 'Network Surface Review':
+        return ''
+    match = re.fullmatch(r'(.+?)\s+-\s+(TCP|UDP)\s+(0\.0\.0\.0|::|\[::\]):(\d{1,5})',
+                         item.get('title', ''), flags=re.I)
+    if not match or int(match.group(4)) > 65535:
+        return ''
+    exe = re.search(r'(?mi)^Executable\s*:\s*(.+)$', item.get('evidence', ''))
+    if not exe or not re.match(r'^[A-Za-z]:\\', exe.group(1).strip()):
+        return ''
+    if not re.search(r'(?mi)^Bind Scope\s*:\s*Wildcard\s*/\s*all interfaces', item.get('evidence', '')):
+        return ''
+    context = re.search(r'(?mi)^Privileged Context\s*:\s*(.+)$', item.get('evidence', ''))
+    http = re.search(r'(?mi)^HTTP/S-like Port\s*:\s*(.+)$', item.get('evidence', ''))
+    return ('|'.join((_canonical(exe.group(1)), match.group(2).lower(),
+                     str(int(match.group(4))),
+                     _canonical(context.group(1)) if context else 'unknown-context',
+                     _canonical(http.group(1)) if http else 'unknown-http')))
+
+
+def _merge_dualstack_network_candidates(items: list[dict]) -> list[dict]:
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for item in items:
+        key = _network_wildcard_group_key(item)
+        if key:
+            groups[key].append(item)
+    seen = set()
+    output = []
+    for item in items:
+        key = _network_wildcard_group_key(item)
+        if not key:
+            output.append(item)
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        members = sorted(groups[key], key=lambda row: row['title'].casefold())
+        # Preserve solo wildcard identities until two *different* IP families
+        # are present. Avoid changing IDs for an ordinary single-family WCR.
+        families = {('IPv6' if re.search(r'(?:\s::|\s\[::\]):', x['title']) else 'IPv4') for x in members}
+        if len(families) < 2:
+            output.extend(members)
+            continue
+        first = dict(members[0])
+        fields = key.split('|')
+        transport, port = fields[1], fields[2]
+        exe = first['title'].split(' - ', 1)[0]
+        first['title'] = f'{exe} - {transport.upper()} {port} (IPv4 + IPv6)'
+        first['component'] = first['title']
+        first['identity'] = 'Network Surface Review|dual-stack|' + key
+        bindings = []
+        for x in members:
+            address = x['title'].rsplit(' ', 1)[-1]
+            family = 'IPv6' if address.startswith(('::', '[::]')) else 'IPv4'
+            bindings.append({'family': family, 'endpoint': address,
+                             'source_record': x.get('source_record', '')})
+        first['network_bindings'] = sorted(bindings, key=lambda x: x['family'])
+        first['evidence'] = (first['title'] + '\nObserved wildcard bind addresses:\n' +
+            '\n'.join(f"  {x['family']}: {x['endpoint']} ({x['source_record']})"
+                      for x in first['network_bindings']) +
+            '\nShared source metadata:\n' + members[0]['evidence'].partition('\n')[2])[:12000]
+        first['description'] = ('Combined review of IPv4 and IPv6 wildcard sockets for one executable, '
+                                'transport and local port. Validate both address families separately.')
+        first['source_records'] = list(dict.fromkeys(label for x in members for label in x.get('source_records', [])))
+        first['occurrence_count'] = sum(int(x.get('occurrence_count') or 1) for x in members)
+        first['merged_legacy_identities'] = [x['identity'] for x in members]
+        output.append(first)
+    return output
+
+
 def _poi_candidates(root: Path, *, preserve_legacy=False) -> list[dict]:
     """One review condition per distinct observed behavior, not per repeat event.
 
@@ -256,11 +402,12 @@ def _poi_candidates(root: Path, *, preserve_legacy=False) -> list[dict]:
                 'recommendation': GUIDANCE.get(module, DEFAULT_GUIDANCE)[0],
                 'artifacts': [filename], 'source_record': match.group(1),
                 'source_records': [match.group(1)], 'occurrence_count': 1,
-                'test_cases': _applicable_test_links(root, module),
+                'test_cases': _route_candidate(root, module, title, evidence)[0],
+                'investigation': _route_candidate(root, module, title, evidence)[1],
             }
             seen[observed_key] = candidate
             candidates.append(candidate)
-    return candidates
+    return _merge_dualstack_network_candidates(candidates)
 
 
 def _finding_candidates(root: Path, findings: list[dict], poi_modules: set[str]) -> list[dict]:
@@ -306,11 +453,18 @@ def _finding_candidates(root: Path, findings: list[dict], poi_modules: set[str])
         if not files:
             files = [f for f in module_artifacts(source) if artifact_path(root, f).is_file() and f.endswith('.txt')]
         result.append({
-            'identity': identity, 'title': title, 'severity': str(finding.get('severity') or 'Informational'),
+            # Keep identity based on the historical source title, preserving
+            # saved WCR IDs and decisions; only soften the tester-visible title.
+            'identity': identity,
+            'title': ('Sensitive Values Observed in Runtime Process Evidence — Requires Validation'
+                      if source == 'Procmon Analysis' and title == 'Sensitive Values Exposed in Runtime Process Evidence'
+                      else title),
+            'severity': str(finding.get('severity') or 'Informational'),
             'source_module': source, 'component': component[:500],
             'evidence': evidence, 'description': str(finding.get('description') or ''),
             'recommendation': str(finding.get('recommendation') or ''), 'artifacts': files,
-            'source_record': '', 'test_cases': _applicable_test_links(root, source),
+            'source_record': '', 'test_cases': _route_candidate(root, source, title, evidence)[0],
+            'investigation': _route_candidate(root, source, title, evidence)[1],
         })
     return result
 
@@ -335,6 +489,8 @@ def sync_review(root: Path, findings: list[dict], *, create=True) -> dict:
     root = Path(root)
     previous = read_review(root)
     old = (previous or {}).get('items', {})
+    historical = {rec.get('id'): rec for rec in (previous or {}).get('retired', [])
+                  if isinstance(rec, dict) and rec.get('id')}
     # A completed v1.5.0 assessment can contain separate IDs for repeated
     # identical events. Retain every such ID and its decisions when re-rendering
     # existing evidence; only new v1.5.1 assessments collapse duplicates.
@@ -355,7 +511,20 @@ def sync_review(root: Path, findings: list[dict], *, create=True) -> dict:
             # Never silently conflate independent candidates.
             raise ValueError(f'Duplicate review identity: {identity}')
         fingerprint = _fingerprint(item)
-        prior = old.get(stable_id) or {}
+        prior = old.get(stable_id) or historical.get(stable_id) or {}
+        legacy = []
+        if item.get('merged_legacy_identities') and not prior:
+            for old_identity in item['merged_legacy_identities']:
+                old_id = 'WCR-' + _digest(old_identity).upper()
+                previous = old.get(old_id) or historical.get(old_id)
+                if previous:
+                    legacy.append({'id': old_id, 'title': previous.get('title', ''),
+                                   'status': previous.get('status', 'PENDING'),
+                                   'notes': previous.get('notes', ''),
+                                   'client_notes': previous.get('client_notes', ''),
+                                   'evidence_reference': previous.get('evidence_reference', '')})
+        # Legacy decisions remain on their retired historical records. A new
+        # grouped IPv4+IPv6 review is always PENDING until explicitly assessed.
         unchanged = prior.get('fingerprint') == fingerprint
         status = prior.get('status', 'PENDING') if unchanged else 'PENDING'
         result[stable_id] = {
@@ -364,11 +533,15 @@ def sync_review(root: Path, findings: list[dict], *, create=True) -> dict:
             'updated_at': prior.get('updated_at', now) if unchanged else now,
             'changed_evidence': bool(prior and not unchanged),
             'previous_status': prior.get('status', '') if prior and not unchanged else '',
+            'merged_previous_decisions': prior.get('merged_previous_decisions', []) or legacy,
         }
-    retired = []
+    retired_by_id = {key: dict(rec) for key, rec in historical.items() if key not in result}
     for key, record in old.items():
         if key not in result:
-            retired.append({'id': key, 'title': record.get('title',''), 'previous_status': record.get('status','')})
+            # A retired observation must retain tester-entered notes, disposition,
+            # fingerprint, and evidence links for auditability; it is NOT current.
+            retired_by_id[key] = {**record, 'retired_at': now, 'historical_only': True}
+    retired = list(retired_by_id.values())
     data = {
         'schema_version': SCHEMA, 'updated_at': now,
         'items': result, 'retired': retired,
@@ -410,7 +583,11 @@ def render_review_reports(root: Path, state: dict | None = None) -> None:
                   f"Supporting reports: {', '.join(item['artifacts']) or 'No module-specific report'}",
                   f"Observed matching events: {item.get('occurrence_count', 1)}",
                   f"Source records: {', '.join(item.get('source_records') or ([item['source_record']] if item.get('source_record') else [])) or '(not applicable)'}",
+
                   f"Related test cases: {', '.join(item['test_cases']) or 'See applicable test_cases.txt'}"]
+        if item.get('merged_previous_decisions'):
+            shared.append('Previous separate IPv4/IPv6 decisions (historical; not transferred): ' + '; '.join(
+                f"{x['id']}={x['status']}" for x in item['merged_previous_decisions']))
         lines += shared + [f"Tester notes: {item['notes'] or '(none)'}",
                            'Evidence changed since decision: ' + ('YES - REVALIDATE' if item['changed_evidence'] else 'No'), '']
         # v1.7.2 uses one tester-controlled manual-validation path. The guide

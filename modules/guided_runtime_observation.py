@@ -631,8 +631,9 @@ def append_session(root: Path, summary: dict) -> list[dict]:
         except (OSError, json.JSONDecodeError):
             sessions = []
     sessions.append(summary)
-    # Bound history so repeated field observations do not grow without limit.
-    sessions = sessions[-20:]
+    # Preserve every successful session summary. Older capture windows must not
+    # silently disappear when a tester performs additional scoped workflows.
+    # The GUI renders a bounded recent view without deleting this history.
     _atomic_json(path, {"schema_version": 3, "sessions": sessions})
     _atomic_text(artifact_path(root, "guided_runtime_observation.txt"), render_observation_report(summary, sessions))
     return sessions
@@ -747,7 +748,19 @@ def run_guided_collectors(root: Path, tools: dict, runtime_targets: list[dict], 
                     body = re.sub(r"(?m)^(Sanitized evidence\s*:\s*).*$", r"\1Temporary full-host source (discarded)", body)
                     retained = artifact_path(root, "working/guided_runtime_target_events.csv")
                     body = re.sub(r"(?m)^(Target-only working CSV\s*:\s*).*$",
-                                  lambda match: match.group(1) + str(retained), body)
+                                  lambda match: match.group(1) + "working/guided_runtime_target_events.csv (sanitized, assessment-relative)", body)
+                    staged.write_text(body, encoding="utf-8")
+                elif report_name == "runtime_secrets_review.txt":
+                    # The analyzer ran inside a TemporaryDirectory; never link
+                    # to that deleted CSV after the guided session is committed.
+                    import re
+                    body = source.read_text(encoding="utf-8", errors="replace")
+                    has_retained_csv = "working/guided_runtime_target_events.csv" in staged_evidence
+                    reference = ("working/guided_runtime_target_events.csv "
+                                 "(sanitized, assessment-owned)" if has_retained_csv else
+                                 "UNAVAILABLE — no target-scoped sanitized CSV was retained")
+                    body = re.sub(r"(?m)^(Sanitized evidence\s*:\s*).*$",
+                                  lambda match: match.group(1) + reference, body)
                     staged.write_text(body, encoding="utf-8")
                 else:
                     shutil.copy2(source, staged)

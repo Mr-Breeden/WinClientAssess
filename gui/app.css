@@ -147,3 +147,158 @@
 .queue-report-integrity{font-size:11px;line-height:1.65;color:#aabbd0;background:#17283a;border-left:3px solid var(--warn);padding:10px 13px;border-radius:4px;margin:12px 0}
 .queue-report-integrity strong{color:#f2d49e}
 #queueReportSearchHint{margin:0 0 11px}
+
+/* v2.2.3 optional TC-PE-001 PE/CFG validation; never an evidence editor. */
+.pe-verification-panel{margin:18px 0;padding:15px;border:1px solid var(--accent);background:var(--panelhi);border-radius:10px}
+.pe-verification-panel[hidden]{display:none!important}
+.pe-verification-panel>summary{font-size:14px;font-weight:700;cursor:pointer;color:var(--txt)}
+.pe-validation-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}
+.pe-validation-grid .wide{grid-column:1/-1}
+.pe-validation-grid label{display:block;font-size:12px;font-weight:650;margin-bottom:7px}
+.pe-validation-grid select,.pe-validation-grid input{width:100%;min-width:0;box-sizing:border-box}
+.pe-verification-buttons{margin:13px 0}
+.pe-verification-panel code{font-family:Consolas,'Courier New',monospace}
+@media(max-width:850px){.pe-validation-grid{grid-template-columns:1fr}}
+
+/* p4: accessible three-step PE validation; results are read-only, external evidence. */
+.pe-auto-workflow{margin:15px 0;padding:13px;border:1px solid var(--line,#344258);border-radius:8px}
+.pe-auto-workflow h3{margin:15px 0 7px;font-size:14px}
+.pe-auto-workflow #peAutoStatus{margin:11px 0;line-height:1.55}
+.pe-auto-workflow #peAutoEvidence{white-space:pre-line;overflow-wrap:anywhere;font-size:11px}
+.pe-auto-workflow .table-wrap{max-width:100%;overflow-x:auto}
+.pe-auto-workflow table{min-width:620px}
+.pe-manual-advanced{margin:16px 0;padding:10px;border:1px solid var(--line,#344258);border-radius:7px}
+.pe-manual-advanced>summary{cursor:pointer;font-weight:650}
+
+/* p7: actions adjacent to the manual procedure, no secondary checklist. */
+#tcChecksPanel[hidden]{display:none!important}
+.tc-procedure-steps{display:grid;gap:12px;padding:8px 0}
+.tc-procedure-step{border-left:2px solid var(--accent,#48bcc3);padding:2px 0 4px 14px}
+.tc-procedure-step pre{white-space:pre-wrap;overflow-wrap:anywhere}
+.tc-step-actions:empty,.tc-step-fallback:empty{display:none}
+.tc-inline-check{display:grid;gap:10px;margin:10px 0;padding:12px;border:1px solid #41546d;border-radius:8px;background:rgba(85,116,143,.08)}
+.tc-inline-check select{max-width:100%;min-width:0}
+.tc-inline-check .button{justify-self:start}
+.tc-inline-result pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.tc-check-heading{font-weight:600;margin:0}
+.workspace-evidence-entry{display:grid;gap:8px}
+.workspace-evidence-entry>#workspaceEvidencePane{margin:0 0 12px}
+#workspaceEvidencePane pre{max-height:520px;overflow:auto}
+
+
+/* v2.2.3-p9: procedure-first, evidence-backed testing workflow. */
+.tc-workflow-intro{border-left:3px solid var(--accent);padding:11px 14px;background:rgba(85,116,143,.10);margin:14px 0}
+.tc-workflow-intro p{margin:7px 0 0}
+.tc-procedure-steps{display:grid;gap:13px;margin:12px 0}
+.tc-procedure-step{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:14px;min-width:0}
+.tc-step-heading{margin:0 0 9px}
+.tc-step-instruction{margin:0 0 9px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.tc-step-reports{margin:9px 0;display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.tc-evidence-entry{max-width:100%;min-width:0}
+.tc-evidence-link{font-size:12px;max-width:100%;overflow-wrap:anywhere;text-align:left}
+.tc-step-report-view:not(:empty){width:100%;min-width:0}
+.tc-step-reports:has(.tc-step-report-view:not(:empty)){display:grid}
+.tc-check-context,.tc-result-context{font-size:12px;line-height:1.65;overflow-wrap:anywhere;word-break:break-word}
+.tc-inline-check select{width:100%;min-width:0}
+.tc-step-result:not(:empty){border-top:1px solid var(--border);padding-top:11px}
+.tc-inline-result{display:grid;gap:7px;min-width:0}
+.tc-inline-result .tc-technical{border-top:1px solid var(--border);padding-top:8px}
+.tc-inline-result .tc-technical summary{cursor:pointer}
+.tc-inline-result pre{max-height:320px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.tc-procedure-outcome{margin-top:9px;padding:14px;border:1px solid var(--border);border-radius:8px}
+.tc-procedure-outcome p{margin:7px 0}
+.tc-step-fallback:not(:empty){padding:12px 14px;border:1px dashed var(--border);border-radius:8px}
+.tc-summary-report:not(:empty){min-width:0;overflow:hidden}
+#manualGuidance #peValidationPanel{margin:12px 0}
+
+/* p11: understated Guided Runtime provenance and continuation affordances. */
+.runtime-session-details{display:grid;gap:7px;margin-top:14px}.runtime-session-detail{border:1px solid var(--border);border-radius:8px;padding:10px 12px}.runtime-session-detail summary{cursor:pointer;font-weight:650}.runtime-session-detail p{margin:8px 0;font-size:12px;overflow-wrap:anywhere}#manualNext{margin-top:10px}.tc-inline-result>.hint{margin-top:8px}
+
+/* p12 — compact, accessible Overview progress without duplicating action panels. */
+.progress-donut-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:22px 0 16px}
+.progress-donut-item{display:flex;flex-direction:column;align-items:center;text-align:center;gap:7px;min-width:0;font-size:12px}
+.progress-donut-item>.hint{max-width:210px;margin:0;min-height:38px}
+.progress-donut{width:132px;height:132px;position:relative;flex:0 0 132px}
+.progress-donut svg{width:100%;height:100%;display:block;transform:rotate(-90deg)}
+.progress-donut circle{fill:none;stroke-width:11}
+.progress-donut .donut-track{stroke:#36485c}
+.progress-donut .donut-fill{stroke-linecap:round;stroke-dasharray:0 295.31;transition:stroke-dasharray .2s ease}
+.progress-donut .donut-fill.tc{stroke:#34b5ab}
+.progress-donut .donut-fill.wcr{stroke:#8ca7e8}
+.progress-donut-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px}
+.progress-donut-center strong{font-size:22px;font-weight:750;color:var(--txt)}
+.progress-donut-center small{font-size:10px;letter-spacing:1px;color:var(--muted)}
+.progress-open{width:100%;margin-top:12px}
+.runtime-controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:14px 0 6px}
+.runtime-controls>.button{max-width:100%}
+@media(max-width:580px){.progress-donut-grid{grid-template-columns:1fr}.runtime-controls>.button{white-space:normal}}
+@media(prefers-reduced-motion:reduce){.progress-donut .donut-fill{transition:none}}
+.tc-check-source-link{margin:8px 0 10px;min-width:0}
+.tc-check-source-link .button{white-space:normal;text-align:left}
+.tc-check-source-link .tc-step-report-view{min-width:0}
+
+/* p14: compact comparison and secret selection without redundant report buttons. */
+.secret-inspector{padding:14px;margin-top:14px;border:1px solid var(--border);border-radius:8px;display:grid;gap:10px;min-width:0}
+.secret-inspector-actions{display:flex;gap:8px;flex-wrap:wrap}
+.secret-inspector-detail{min-width:0;overflow-wrap:anywhere}
+.secret-inspector-detail .manual-report-content{max-height:320px;white-space:pre-wrap}
+#compareSections .review-guide-section{margin:10px 0}
+#compareSections pre{max-height:280px;white-space:pre-wrap;overflow:auto}
+
+.service-path-callout{margin:12px 0;padding:13px;border:1px solid var(--warn);border-radius:8px;background:rgba(200,150,55,.07)}
+.service-path-callout pre{max-height:250px;white-space:pre-wrap;overflow:auto}
+
+/* p15: complete multiline values can be scrolled without truncation. */
+.secret-inspector-detail .secret-original{max-height:520px;overflow:auto;white-space:pre;user-select:text}
+.secret-inspector-detail h4{margin:10px 0 4px}
+
+/* p16: purpose and decision criteria visible while following the procedure */
+.tc-security-purpose{border:1px solid var(--border);border-radius:8px;padding:13px 15px;margin:9px 0;background:var(--panelhi)}
+.tc-security-purpose p,.tc-interpret-line p{white-space:pre-wrap;line-height:1.55;margin:5px 0 10px}
+.tc-interpret-line{padding:9px 0;border-bottom:1px solid var(--border)}
+.tc-interpret-line:last-child{border-bottom:0}
+/* p16-p1: full TC completion form follows the procedure; WCR dispositions
+   remain attached to their own observations, without a second evidence guide. */
+.manual-completion-block{margin-top:20px;padding-bottom:16px}
+.manual-completion-block .manual-completion-heading{margin-top:10px}
+.linked-wcr-observation{padding-top:14px}
+.linked-wcr-observation h4{margin:0 0 8px}
+.linked-wcr-observation p{overflow-wrap:anywhere}
+
+/* p17: candidate observation is scannable, not a single overloaded paragraph. */
+.p17-observation{display:grid;gap:.3rem;margin:.55rem 0 1rem;}
+.p17-observation p{margin:0;line-height:1.5;overflow-wrap:anywhere;}
+.p17-candidate-steps{padding:.85rem 1rem;margin:.75rem 0;border:1px solid var(--border-color,#39495d);border-radius:10px;}
+.p17-candidate-steps ol{padding-left:1.4rem;line-height:1.55;}
+.p17-candidate-steps li{margin:.45rem 0;}
+.p17-candidate-steps pre{white-space:pre-wrap;overflow-wrap:anywhere;}
+
+/* p18 evidence-first guidance */
+.tc-step-heading{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.tc-step-number{background:#155c66;color:#d9ffff;border:1px solid #39b8c4;border-radius:6px;padding:5px 9px;font-size:11px;font-weight:800;letter-spacing:.06em}
+.tc-stored-evidence{margin:12px 0;padding:12px;background:rgba(75,115,137,.10);border:1px solid var(--border);border-radius:9px}
+.tc-collected-excerpt{max-height:350px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}
+.tc-live-recheck{margin:10px 0}.tc-live-recheck>summary{cursor:pointer;font-weight:650}
+.recent-item-actions{display:flex;align-items:center;justify-content:space-between;gap:10px}.recent-remove{font-size:11px}
+.p18-warning{border:1px solid #b77c26;border-left:4px solid #eda53b;border-radius:8px;padding:12px;margin:10px 0;background:rgba(224,146,32,.10)}
+.p18-warning strong{color:#efb955}
+.p18-reference{margin:13px 0}.p18-reference summary{cursor:pointer;font-weight:700}.p18-reference input{margin:8px 0;width:100%}
+.p18-reference table{font-size:12px}
+
+.p18-learning{border:1px solid var(--border);border-radius:9px;padding:13px;margin:16px 0;background:rgba(90,135,155,.08)}
+.p18-learning>summary{cursor:pointer;font-weight:750}.p18-learning pre{white-space:pre-wrap;word-break:break-word;font-size:12px}
+.p18-example{border-top:1px solid var(--border);padding-top:10px;margin-top:10px}
+
+.p18-missing-evidence{padding:12px;border-left:3px solid #cf9137;background:rgba(207,145,55,.08);margin:10px 0}
+
+/* p18-p1: tool downloads in the readiness table; contextual PE comparisons */
+.tool-download-link{color:#78d8e2;text-decoration:underline;text-underline-offset:3px;font-weight:650;white-space:nowrap}
+.tool-download-link:hover,.tool-download-link:focus-visible{color:#c8ffff}
+.p18-pe-step-guide{margin:14px 0 8px;background:rgba(90,135,155,.07)}
+.p18-pe-mitigation{padding:14px 0;border-top:1px solid var(--border)}
+.p18-pe-mitigation h4{font-size:15px;margin:0 0 7px}
+.p18-pe-mitigation p{margin:7px 0;line-height:1.55}
+.p18-pe-comparison{margin:10px 0}
+.p18-pe-comparison strong{display:block;margin-bottom:6px;font-size:12px}
+.p18-pe-present{color:#87d4ae}
+.p18-pe-comparison pre{background:rgba(9,18,31,.6);padding:10px;border:1px solid var(--border);border-radius:8px}

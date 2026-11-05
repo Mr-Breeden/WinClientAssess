@@ -3,6 +3,7 @@ from utils.assessment_layout import artifact_path
 
 import json
 import re
+import struct
 from pathlib import Path
 
 from utils.report_format import header, kv, section
@@ -32,6 +33,79 @@ def _source_files(file_inventory):
             yield path
 
 
+
+# Read-only Electron ASAR inspection. No extraction, symlink traversal, or
+# execution. ASAR uses two Chromium-pickle fields followed by a bounded JSON
+# header and offset-indexed file data. Mark unsupported variants explicitly.
+MAX_ASAR_HEADER = 8 * 1024 * 1024
+MAX_ASAR_ITEMS = 200
+MAX_ASAR_TOTAL_READ = 32 * 1024 * 1024
+
+
+def _asar_sources(path: Path):
+    """Return (sources, coverage), using bounded reads and immutable archive offsets."""
+    sources = []
+    try:
+        with path.open('rb') as stream:
+            total = path.stat().st_size
+            fields = stream.read(16)
+            if len(fields) != 16:
+                raise ValueError('ASAR header truncated')
+            size_pickle, header_size, json_size = struct.unpack_from('<III', fields)
+            if size_pickle != 4 or header_size < 8 or header_size > MAX_ASAR_HEADER or json_size > header_size - 8:
+                raise ValueError('ASAR header size invalid or unsupported')
+            if 8 + header_size > total:
+                raise ValueError('ASAR header exceeds file size')
+            stream.seek(16)
+            header = json.loads(stream.read(json_size).decode('utf-8'))
+            if not isinstance(header, dict) or not isinstance(header.get('files'), dict):
+                raise ValueError('ASAR file table not found')
+            offset_base = 8 + header_size
+            selected = []
+            count = [0]
+            def walk(node, prefix=''):
+                for name, child in node.items():
+                    count[0] += 1
+                    if count[0] > 100000:
+                        raise ValueError('ASAR table too large')
+                    if not isinstance(child, dict) or '/' in name or '\\' in name or name in ('.', '..'):
+                        continue
+                    key = prefix + name
+                    if isinstance(child.get('files'), dict):
+                        walk(child['files'], key + '/')
+                    elif (Path(name).suffix.lower() in TEXT_EXTS and not child.get('unpacked')
+                          and 'link' not in child and len(selected) < MAX_ASAR_ITEMS):
+                        try:
+                            offset = int(str(child.get('offset', '-1')))
+                            size = int(child.get('size', -1))
+                        except (ValueError, TypeError):
+                            continue
+                        if (0 <= offset and 0 <= size <= MAX_SOURCE_SIZE
+                                and offset_base + offset + size <= total):
+                            selected.append((key, offset, size))
+            walk(header['files'])
+            consumed = 0
+            for name, offset, size in selected:
+                if consumed + size > MAX_ASAR_TOTAL_READ:
+                    break
+                stream.seek(offset_base + offset)
+                data = stream.read(size)
+                if len(data) == size:
+                    sources.append((str(path) + '::' + name, data.decode('utf-8', errors='replace')))
+                    consumed += size
+            return sources, 'SCANNED' if sources else 'NO ELIGIBLE TEXT FILES'
+    except (OSError, UnicodeError, ValueError, TypeError, RecursionError, json.JSONDecodeError) as exc:
+        return [], 'NOT INSPECTED: ' + type(exc).__name__
+
+
+def _asar_files(file_inventory):
+    found = set()
+    for row in file_inventory or []:
+        path = Path(str(row.get('path') or ''))
+        if path.name.lower() == 'app.asar' and path.is_file() and not path.is_symlink() and path not in found:
+            found.add(path)
+            yield path
+
 def _line_number(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
@@ -60,11 +134,20 @@ def run_electron_security_review(roots, assessment_dir: Path, file_inventory=Non
     electron_source_seen = bool(versions)
     files_with_navigation_guard = set()
 
+    asar_coverage = []
+    sources = []
     for path in paths:
         try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+            sources.append((str(path), path.read_text(encoding="utf-8", errors="ignore")))
+        except OSError:
             continue
+    for archive in _asar_files(file_inventory):
+        packed_sources, coverage = _asar_sources(archive)
+        asar_coverage.append((str(archive), coverage, len(packed_sources)))
+        sources.extend(packed_sources)
+
+    for source_path, text in sources:
+        path = Path(source_path)
         if "BrowserWindow" in text or "electron" in path.as_posix().lower():
             electron_source_seen = True
         if NAVIGATION_GUARDS.search(text):
@@ -117,7 +200,14 @@ def run_electron_security_review(roots, assessment_dir: Path, file_inventory=Non
         kv("Loopback HTTP loading", remote_content),
         kv("Navigation guard detected", navigation_limited),
         kv("Referenced port keys", ", ".join(sorted(port_keys)) or "None"),
+        kv("Packaged ASAR archives located", len(asar_coverage)),
+        kv("Packaged ASAR text sources scanned", sum(row[2] for row in asar_coverage)),
     ]
+    if asar_coverage:
+        lines += section("Packaged ASAR Coverage", width, len(asar_coverage))
+        for archive_name, coverage, count in asar_coverage:
+            lines += [f"Archive : {archive_name}", f"Coverage: {coverage}; scanned text entries: {count}", ""]
+        lines += ["Unpacked archive sidecars are not implied to be scanned unless listed as loose files.", ""]
     if versions:
         lines += section("Declared Electron Versions", width, len(versions))
         for item in versions:
@@ -195,12 +285,14 @@ def run_electron_security_review(roots, assessment_dir: Path, file_inventory=Non
             }
         )
 
+    asar_gaps = any(coverage.startswith('NOT INSPECTED') for _, coverage, _ in asar_coverage)
     return {
-        "status": "WARN" if findings else "PASS",
+        "status": "WARN" if findings or asar_gaps else "PASS",
         "details": f"{len(versions)} Electron version declaration(s); {len(hits)} security signal(s); {len(findings)} review point(s)",
         "findings": findings,
         "electron_versions": versions,
         "electron_signals": hits,
+        "asar_coverage": asar_coverage,
         "local_http_port_keys": sorted(port_keys),
         "dynamic_loopback_http": remote_content,
     }

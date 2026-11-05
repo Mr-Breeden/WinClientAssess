@@ -38,7 +38,7 @@ Common static outputs include:
 - `component_lifecycle_review.txt`
 - `updater_review.txt`
 
-`secrets_review.txt` can include text/config indicators and PE printable-string indicators. Actual detected secret values remain redacted; PE indicators include location/encoding metadata for local tester validation.
+`secrets_review.txt` can include text/config indicators and PE printable-string indicators. Actual detected secret values remain redacted in this report; PE indicators include location/encoding metadata. The local TC-CF-001 tester viewer can display complete originals from integrity-verified extracted files without saving them.
 
 ## System-state / privilege artifacts
 

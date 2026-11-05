@@ -71,3 +71,7 @@ When a proof resource applies, WCA can provide:
 - conditions under which the observation should **not** be reported.
 
 WCA never compiles or executes proof resources automatically.
+
+## p13 Electron ASAR coverage
+
+Where `app.asar` is present in the file inventory, WCA attempts bounded, read-only inspection of packaged `.js`, `.json` and `.html`/`.htm` entries without unpacking the archive on disk. The Electron security report states coverage per archive, including NOT INSPECTED for malformed or unsupported file tables. Archive content beyond configured safety/size limits and external unpacked sidecars are not implied to have been inspected. Absence of a signal does not prove secure renderer configuration.

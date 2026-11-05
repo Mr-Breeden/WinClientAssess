@@ -12,6 +12,7 @@ from pathlib import Path
 
 from utils.assessment_state import AssessmentState
 from utils.guided_review import counts, read_review
+from utils.manual_test_workflow import _snapshot
 
 MAX_RECENT = 40
 MAX_CHILDREN = 80
@@ -31,13 +32,14 @@ class RecentAssessments:
 
     def _read(self) -> dict:
         if self.path.is_symlink() or not self.path.is_file():
-            return {'paths': [], 'parents': []}
+            return {'paths': [], 'parents': [], 'removed': []}
         try:
             value = json.loads(self.path.read_text(encoding='utf-8'))
             if not isinstance(value, dict):
                 return {'paths': [], 'parents': []}
             return {'paths': [s for s in value.get('paths', []) if isinstance(s, str)][:MAX_RECENT],
-                    'parents': [s for s in value.get('parents', []) if isinstance(s, str)][:MAX_RECENT]}
+                    'parents': [s for s in value.get('parents', []) if isinstance(s, str)][:MAX_RECENT],
+                    'removed': [s for s in value.get('removed', []) if isinstance(s, str)][:MAX_RECENT * 4]}
         except (OSError, ValueError):
             return {'paths': [], 'parents': []}
 
@@ -49,6 +51,7 @@ class RecentAssessments:
         full = root.expanduser().resolve()
         with self.lock:
             data = self._read()
+            data['removed'] = [x for x in data.get('removed', []) if os.path.normcase(x) != os.path.normcase(str(full))]
             data['paths'] = [str(full)] + [x for x in data['paths'] if os.path.normcase(x) != os.path.normcase(str(full))]
             data['parents'] = [str(full.parent)] + [x for x in data['parents'] if os.path.normcase(x) != os.path.normcase(str(full.parent))]
             data['paths'] = data['paths'][:MAX_RECENT]
@@ -70,6 +73,38 @@ class RecentAssessments:
             finally:
                 temp.unlink(missing_ok=True)
 
+    def remove(self, path: str) -> None:
+        """Remove only the recent-history reference, never assessment contents."""
+        if not isinstance(path, str) or not path.strip() or len(path) > 2048:
+            raise ValueError('Select a valid recent assessment entry.')
+        # Removal is restricted to an already recorded path, even if missing on disk.
+        with self.lock:
+            data = self._read()
+            key = os.path.normcase(path)
+            known = {os.path.normcase(x) for x in data['paths']}
+            if key not in known:
+                # Parent-discovered assessments may also be shown; validate the
+                # direct child against a remembered parent without scanning disk.
+                if not any(os.path.normcase(str(Path(path).parent)) == os.path.normcase(x)
+                           for x in data['parents']):
+                    raise ValueError('Assessment was not in recent history.')
+            data['paths'] = [x for x in data['paths'] if os.path.normcase(x) != key]
+            data['removed'] = [path] + [x for x in data.get('removed', []) if os.path.normcase(x) != key]
+            data['removed'] = data['removed'][:MAX_RECENT * 4]
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            if self.path.is_symlink():
+                raise ValueError('Refusing symbolic-link history catalog.')
+            temp = self.path.with_name(self.path.name + f'.{os.getpid()}.{threading.get_ident()}.new')
+            try:
+                with os.fdopen(os.open(temp, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600), 'w', encoding='utf-8') as handle:
+                    json.dump(data, handle, ensure_ascii=True, sort_keys=True)
+                    handle.write('\n')
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temp, self.path)
+            finally:
+                temp.unlink(missing_ok=True)
+
     def list_recent(self, jobs: list[dict] | None = None) -> list[dict]:
         """Lightweight summaries. No SHA scan: NOT VERIFIED until selected and checked.
 
@@ -77,7 +112,8 @@ class RecentAssessments:
         """
         with self.lock:
             index = self._read()
-        candidates = list(index['paths'])
+        removed = {os.path.normcase(x) for x in index.get('removed', [])}
+        candidates = [x for x in index['paths'] if os.path.normcase(x) not in removed]
         # Explicitly selected parents only; no recursive filesystem searching.
         for parent_str in index['parents'][:8]:
             parent = Path(parent_str)
@@ -96,7 +132,7 @@ class RecentAssessments:
         for path in candidates:
             root = Path(path)
             norm = os.path.normcase(str(root))
-            if norm in seen or root.is_symlink():
+            if norm in seen or norm in removed or root.is_symlink():
                 continue
             seen.add(norm)
             try:
@@ -121,12 +157,20 @@ class RecentAssessments:
                                       'total': len(review.get('items', {}))}
             except (OSError, TypeError, ValueError):
                 pass
+            manual_summary = {'completed': 0, 'total': 0}
+            try:
+                manual = _snapshot(root, verified=False)  # display-only, NO full SHA scan; open to verify
+                manual_summary = {'completed': int((manual.get('by_status') or {}).get('COMPLETED', 0))
+                    + int((manual.get('by_status') or {}).get('ADDRESSED IN GUIDED REVIEW', 0)),
+                    'total': int(manual.get('total') or 0)}
+            except (OSError, ValueError, TypeError, KeyError):
+                pass
             rows.append({'path': str(root), 'name': str(data.get('assessment_name') or root.name)[:120],
                          'mode': data.get('mode', ''), 'target_type': (data.get('target') or {}).get('type', ''),
                          'state': data.get('status', 'UNKNOWN'), 'coverage': data.get('coverage', ''),
                          'framework_version': data.get('framework_version', ''),
                          'last_activity': data.get('updated_at') or data.get('created_at') or '',
-                         'review': review_summary,
+                         'review': review_summary, 'manual': manual_summary,
                          'integrity': 'NOT VERIFIED',
                          'job': (active.get(norm) or {}).get('state', '')})
         rows.sort(key=lambda x: x['last_activity'], reverse=True)

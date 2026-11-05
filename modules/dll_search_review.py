@@ -50,6 +50,7 @@ def run_dll_search_review(assessment_dir: Path, procmon_data=None, runtime_targe
 
     records = []
     poi = []
+    environment_count = 0
     for idx, event in enumerate(unique, 1):
         process = str(event.get("Process") or "")
         path = str(event.get("Path") or "")
@@ -65,8 +66,14 @@ def run_dll_search_review(assessment_dir: Path, procmon_data=None, runtime_targe
         broad = broad_write_aces(acl)
         user_location = _likely_user_writable(parent) or bool(broad)
 
+        # Environment-derived PATH search locations are context, not Veyon-owned code paths.
+        environment_path = ("%USERPROFILE%" in parent.upper() or any(
+            word in parent.casefold() for word in ("\\python\\", "microsoft vs code", "powertoys", "\\windowsapps", "\\.dotnet\\")
+        ))
+        if environment_path: environment_count += 1
         record = {
             "ID": f"DLL-{idx:04d}",
+            "EnvironmentSearchPath": environment_path,
             "Process": process,
             "PID": event.get("PID"),
             "MissingDLL": path,
@@ -105,13 +112,16 @@ def run_dll_search_review(assessment_dir: Path, procmon_data=None, runtime_targe
         "",
         f"Unique missing DLL lookups : {len(records)}",
         f"Review points              : {len(poi)}",
+        f"Environment-derived search paths : {environment_count}",
+        "A path may look user-writable without a verified ACL. Review points require broad-write ACL evidence",
+        "or a privileged target consumer with a likely writable search location.",
         "",
         "POINTS OF INTEREST",
         "-" * width,
     ]
 
     if not poi:
-        lines.append("No missing-DLL lookup was automatically correlated with a broad-write ACL or likely user-writable location.")
+        lines.append("No lookup met the review-point rule (verified broad-write ACL, or privileged consumer at likely writable location).")
         lines.append("The complete lookup list remains available below for manual review.")
         lines.append("")
 
@@ -146,7 +156,7 @@ def run_dll_search_review(assessment_dir: Path, procmon_data=None, runtime_targe
         lines += [
             f"{record['ID']} | {record['Process']} | {record['Result']} | {record['MissingDLL']}",
             f"         Directory: {record['SearchDirectory']}",
-            f"         Broad-write ACEs: {len(record['BroadWriteACEs'])} | Likely user-writable: {record['LikelyUserWritableLocation']}",
+            f"         Broad-write ACEs: {len(record['BroadWriteACEs'])} | Likely user-writable: {record['LikelyUserWritableLocation']} | Environment PATH: {record['EnvironmentSearchPath']}",
             "",
         ]
 
@@ -159,4 +169,5 @@ def run_dll_search_review(assessment_dir: Path, procmon_data=None, runtime_targe
         "details": f"{len(records)} missing DLL lookup(s); {len(poi)} DLL search review point(s)",
         "dll_records": records,
         "dll_pois": poi,
+        "environment_lookup_count": environment_count,
     }

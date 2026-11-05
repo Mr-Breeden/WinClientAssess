@@ -1,4 +1,4 @@
-# WCA v2.2.2 — Unified Tester Workspace
+# WCA v2.2.3 — Unified Tester Workspace
 
 One **Testing Queue** replaces the former sequence of separate Guided Review, Manual Test Cases and a second attack-surface checklist. WCA still preserves independent, integrity-protected candidate dispositions and manual case decisions; a candidate disposition **does not** automatically prove test completion or exploitability.
 
@@ -17,19 +17,17 @@ Each review editor has **Internal Tester Notes** (never in client deliverables) 
 
 ## Status integrity and continuity
 
-Manual decisions persist in `working/manual_test_review.json`; candidate decisions persist in `working/tester_review_state.json`. Both are included in the assessment integrity manifest. `test_cases.txt` remains immutable. If a linked candidate becomes pending again, or a test's fingerprint changes, a previous guided-coverage affirmation no longer counts as addressed. Older incompatible framework versions remain read-only. The M2-p4 workflow and RC1 tester startup/compatible-assessment access were field tested on Windows; each new assessment environment still needs its own tool and integrity checks.
+Manual decisions persist in `working/manual_test_review.json`; candidate decisions persist in `working/tester_review_state.json`. Both are included in the assessment integrity manifest. `test_cases.txt` remains immutable. If a linked candidate becomes pending again, or a test's fingerprint changes, a previous guided-coverage affirmation no longer counts as addressed. Older incompatible framework versions remain read-only. The prior tester workflow and startup/compatible-assessment access were field tested on Windows; each new assessment environment still needs its own tool and integrity checks.
 
 ## Windows picker and Guided Runtime
 
 The native file/folder picker runs in a dedicated Python process, ensuring Tkinter executes on its own main GUI thread instead of the server's HTTP request thread. Cancellation returns an empty selection without a failure notice. The Guided Runtime Start button is disabled while starting or running; backend assessment locks remain authoritative.
 
 
-## M2-p4 usability
+## Current evidence-first procedures
 
-Each selected TC displays **all** related WCR candidates as independent collapsible cards, with pending candidates expanded by default. Candidate review controls appear inside each card; each WCR saves independently. A full-width **Manual Test Completion** heading separates those reviews from the TC's own procedure and status. The Overview and Final Checklist calculate outstanding work using both applicable manual requirements and pending WCR dispositions.
+Read each numbered How to Perform step. Verified report evidence appears alongside instructions, and case-specific inspectors show previously collected observations without requiring a recheck. Live read-only checks remain explicit and their results do not change saved evidence or complete any TC or WCR.
 
-Evidence & Guidance no longer offers `test_cases.txt` as a second tester workflow. The lengthy `attack_surface_test_plan.txt` remains an optional offline reference, while supplemental guidance cards display scope-dependent security testing themes and navigate back to the Testing Queue.
+TC-CF-001 uses one Potential Secret Indicator Review rather than a second secrets recheck. TC-PE-001 DUMPBIN runs only by explicit tester action, with persistent files retained outside the protected assessment; its summary is concise and missing mitigation flags require applicability review. TC-AR-003 Step 5 gives the official WinDbg, Ghidra and Frida guides directly next to the advanced-analysis instruction.
 
-## R2 report review and applicability
-
-Click a linked **Supporting reports** file to read it beneath the corresponding case or candidate. Use the built-in literal Find, Next and Previous controls to inspect matched lines with adjacent context; copy path/PowerShell searches are optional, never run by WCA. Excluded manual cases and their mode, evidence and prerequisite limitations appear in an expandable read-only explanation. These are not new queue activities or evidence of security defects.
+Inspect the relevant source report only once. TC completion controls follow TC procedures; each linked WCR has its own independent disposition after candidate-specific evidence. Preserve provenance and do not assume historical process identifiers, sockets, or ACLs reflect current state.

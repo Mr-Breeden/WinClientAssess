@@ -1,6 +1,6 @@
 # External Tool Installation Guide — Windows 11
 
-**Windows Client Assessment v2.2.2**  
+**Windows Client Assessment v2.2.3**  
 **Documentation reference date:** 2026-10-21 (verify upstream installer versions and requirements before downloading)
 
 Windows Client Assessment categorizes external tools by both **dependency level** and **usage**. A tool can be useful even when the framework does not invoke it automatically.
@@ -15,6 +15,10 @@ Usage classifications:
 For each tool below, the guide covers purpose, status, installation, privileges/PATH, verification, detection/override, consuming modules, and missing-tool behavior.
 
 For first-time testers, use **GUI → Tool readiness → Configure tool location** to browse, verify, save or remove an executable override; manual JSON editing below remains supported. Missing optional/manual tools do not block WCA assessment. Detection is not a claim that all testing is complete.
+
+### Optional extra search location: `C:\Tools`
+
+`C:\Tools` is **not** an installation default or a required directory. WCA neither creates nor populates it. When a recognized tool is not found through Tool Readiness overrides, `PATH`, normal installation locations, or WinGet, WCA makes a bounded final check for exact known filenames in `C:\Tools`, conventional tool-specific subdirectories (such as `C:\Tools\PESecurity`), and `C:\Tools\Sysinternals`. This is a filename/path presence check; it does not execute tools or recursively scan arbitrary directories. Testers may continue keeping files anywhere and setting explicit Tool Readiness paths.
 
 ## Quick support matrix
 
@@ -40,6 +44,8 @@ For first-time testers, use **GUI → Tool readiness → Configure tool location
 | dotnet-counters | OPTIONAL / MANUAL_GUIDED | Not normally | Usually yes | Detected; `dotnet-counters` | manual counter workflow unavailable |
 | Wireshark/Npcap | OPTIONAL / MANUAL | Npcap install/capture setup commonly requires elevation | No | Wireshark detected; `Wireshark` | manual packet capture unavailable |
 | Burp Suite | OPTIONAL companion / MANUAL | No for normal use | No | **Not detected/invoked by WCA; no override key** | manual HTTP/API interception unavailable |
+| DUMPBIN | OPTIONAL / MANUAL_GUIDED | No for local files | Yes in Developer CMD, otherwise configure path | Detected from MSVC Build Tools / tool location override `DUMPBIN` | independent CFG loadconfig validation unavailable |
+| PESecurity | OPTIONAL / MANUAL_GUIDED | No for local files | Import module explicitly in PowerShell | Optional module path `PESecurity`; no automatic import | secondary PE metadata review unavailable |
 | WinDbg | OPTIONAL / MANUAL | Attach target may require elevation | No | Detected; `WinDbg` | manual native debugging unavailable |
 | Ghidra | OPTIONAL / MANUAL | No for ordinary files | No | Detected; `Ghidra` | manual deep native RE unavailable |
 | Frida | OPTIONAL / MANUAL | Attach target may require elevation | Usually yes for CLI convenience | Detected; `Frida` | manual dynamic instrumentation unavailable |
@@ -454,6 +460,71 @@ Core Windows Client Assessment operation is unaffected; manual HTTP/API validati
 
 ---
 
+## DUMPBIN — TC-PE-001 CFG instrumentation verification
+
+**Level:** OPTIONAL / **Usage:** MANUAL_GUIDED (never automatically executed)  
+**Source:** https://learn.microsoft.com/en-us/cpp/build/reference/dumpbin-reference  
+**CFG indicators:** https://learn.microsoft.com/en-us/cpp/build/reference/guard-enable-control-flow-guard
+
+Microsoft Visual Studio Build Tools with the C++ toolchain provides `dumpbin.exe`. A tester can install the workload on an approved Windows VM, for example:
+
+```powershell
+winget install --id Microsoft.VisualStudio.BuildTools --exact --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+This installs/updates Visual Studio tooling, **not** WCA; use approved VM snapshots and obtain approval for downloads.
+
+**Discovery in v2.2.3 field-test patch p1:** WCA searches the current Visual Studio
+installer registry via Microsoft's installed `vswhere.exe` (when available),
+`VCToolsInstallDir`, `VSINSTALLDIR`, and versioned Visual Studio installation roots,
+including `18\BuildTools\VC\Tools\MSVC\14.51.x\bin\Hostx64\x64\dumpbin.exe`.
+This supports Visual Studio 2026's `18` folder under either Program Files root,
+and non-default locations reported by vswhere. Tool Readiness overrides still win.
+
+A typical tester-provided path is:
+
+```text
+C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\dumpbin.exe
+```
+
+The VC toolset version and installation root vary. Do not hard-code the example
+path in a testing command; use the detected/configured executable.
+ Open **x64 Native Tools Command Prompt for VS** or a Visual Studio Developer Command Prompt, where `dumpbin` is on `PATH`. `dumpbin` may also be configured explicitly through **Tool readiness → Configure tool location → DUMPBIN**. WCA only discovers the executable and creates suggested text commands.
+
+Run from **CMD, NOT PowerShell**:
+
+```cmd
+dumpbin /headers /loadconfig "C:\Path\To\resources\koffi\win32_x64\koffi.node" /OUT:"C:\Engagements\Example\TC-PE-001-koffi.node-dumpbin.txt"
+```
+
+In the output, check the PE `Guard` header characteristic **and** Guard Flags `CF Instrumented` **and** `FID table present`. A WCA `CFG : True` means only the PE Optional Header `GUARD_CF` bit was set, **not** that all three checks passed. A binary can be partially CFG-instrumented, and metadata alone cannot establish actual runtime exploitability.
+
+### CMD file-list loop (Lee's workflow)
+
+With an externally saved list containing one complete PE path per line, including `.node` and extensionless PE payloads if applicable:
+
+```cmd
+FOR /F "usebackq delims=" %I IN ("C:\Engagements\Example\TC-PE-001-files.txt") DO dumpbin /headers /loadconfig "%~I" /OUT:"C:\Engagements\Example\TC-PE-001-dumpbin\%~nxI_dump.txt"
+```
+
+This is an **interactive CMD command**, where the loop variable is `%I`; inside a `.bat`/`.cmd` script it must be `%%I`. Create the output directory before running. Basename collisions overwrite output files; WCA blocks copying the batch command if the selected PE paths have duplicate basenames, and offers unique per-file command output names instead. The Testing Queue generates a `.txt` path list and copyable single/batch commands; the downloaded list is not stored in protected assessment evidence. Always confirm paths are real on the tester workstation.
+
+## NetSPI PESecurity — independent PowerShell validation
+
+**Level:** OPTIONAL / **Usage:** MANUAL_GUIDED (never automatically invoked)  
+**Source:** https://github.com/NetSPI/PESecurity
+
+Download/review the approved NetSPI PowerShell module `Get-PESecurity.psm1` and save it to an approved workstation folder, for example `C:\Tools\PESecurity`. WCA also checks the usual PowerShell module folders and `PSModulePath` for `Get-PESecurity.psm1` (including module-name and version subdirectories), and common `C:\Tools` locations. It does **not** automatically import or execute the module. A module installed outside those locations still requires a Tool Readiness override. If desired, configure its path in **Tool readiness → Configure tool location → PESecurity** (the only supported `.psm1` module override). This check is separate from DUMPBIN and runs in **PowerShell**:
+
+```powershell
+Import-Module -Name 'C:\Tools\PESecurity\Get-PESecurity.psm1' -ErrorAction Stop
+Get-PESecurity -File 'C:\Path\To\Application.exe' | Format-List *
+```
+
+PESecurity can cross-check ASLR, DEP, SafeSEH, CFG, signing and HighEntropyVA, but it does not replace the Microsoft-recommended DUMPBIN `CF Instrumented` + `FID table present` check. Verify module compatibility with the workstation's PowerShell edition; imported third-party code executes within the tester session. If a module import fails, follow a manual DUMPBIN workflow without blocking the assessment.
+
+---
+
 ## WinDbg
 
 **Level:** OPTIONAL  
@@ -594,6 +665,7 @@ After installing the tools desired for your assessment VM:
 [ ] lessmsi.exe detected (recommended for MSI extraction)
 [ ] dotnet --info succeeds
 [ ] ilspycmd --version succeeds (recommended for .NET)
+[ ] optional DUMPBIN and PESecurity installed/configured if TC-PE-001 validation is required
 [ ] optional manual tools installed as required by scope
 [ ] python .\wca.py starts and Tool Detection paths look correct
 [ ] tool_paths.json contains only intentional custom overrides
@@ -601,3 +673,12 @@ After installing the tools desired for your assessment VM:
 ```
 
 If Tool Detection shows a valid executable under a Microsoft Store/WinGet/WindowsApps path, an explicit override is not required unless the alias does not execute correctly in your environment.
+
+
+### v2.2.3-p4 guided DUMPBIN execution
+
+In **Testing Queue → TC-PE-001**, use **Run DUMPBIN and Analyze CFG** to invoke an already-detected `dumpbin.exe` against selected PE files from the verified assessment. The GUI runs it as a child process (no CMD shell and no target application launch), then reads the `/headers /loadconfig` output. A separate, per-run sibling folder beside the assessment holds raw outputs and a human-readable CFG summary. No assessor-installed tool, executable or PowerShell module is downloaded or installed automatically.
+
+Expected metadata markers: `Guard` beneath **DLL characteristics**, and `CF instrumented` plus `FID table present` beneath **Guard Flags** in the load-config section. All present means **CFG metadata verified**, *not* proof of enabled runtime CFG. Any missing indicator means **Review required** (not an automatic vulnerability). If DUMPBIN cannot execute, file reading fails, or output is invalid, the result is **Inconclusive**. A missing FID table may be normal for binaries with no applicable indirect-call targets; investigate before reporting.
+
+The **Advanced / Manual** controls preserve copyable commands for Visual Studio Developer CMD, plus optional NetSPI PESecurity guidance for PowerShell. PESecurity is **not** imported by the one-click operation. If DUMPBIN cannot run directly from WCA's GUI environment, run the manual command in the Visual Studio Developer Command Prompt to obtain evidence independently.

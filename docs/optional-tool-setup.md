@@ -1,0 +1,7 @@
+# Optional tools preparation
+
+Run `powershell -File .\scripts\install_optional_tools.ps1 -CheckOnly` to inspect readiness without changes. The command `-DownloadOnly -Tools Sysinternals` downloads the official Microsoft suite into the user-local WCA optional-tools directory. Use `-Install -Tools Sysinternals` to explicitly confirm extraction and validate the extracted Microsoft Authenticode signatures before use. Record downloaded SHA-256 for provenance; it is not a trusted pinned hash unless independently checked against an official release value.
+
+For ILSpyCmd and PESecurity, `-Install -Tools ILSpyCmd,PESecurity` prompts separately for user-scoped installations through dotnet and PowerShell Gallery, respectively. Other supported vendors are listed with official links for manual acquisition; this script deliberately does not guess their latest release binaries or silently execute installers. Installation may require internet access, appropriate .NET/PowerShell prerequisites, repository trust settings, and vendor license review. No system PATH mutation occurs. Import an offline package using vendor guidance and then configure WCA's Tool Readiness paths.
+
+This script is a Windows-only tester preparation utility. It is not an assessment collection step. Missing optional tools must not block unaffected WCA testing. Use a controlled VM and review software licenses and download trust before any external tool execution.

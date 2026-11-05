@@ -1,3 +1,4 @@
 rich>=13.7.0
 pefile>=2023.2.7
 psutil>=5.9.8
+cryptography>=42,<50

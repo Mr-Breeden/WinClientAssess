@@ -114,7 +114,7 @@ def run_pe_analysis(roots, assessment_dir, file_inventory=None):
         "",
         "Purpose:",
         "  Identifies executable images by their PE headers, including extensionless MSI-extracted",
-        "  payloads. Missing mitigation flags are review points, not confirmed vulnerabilities.",
+        "  payloads. ASLR, DEP/NX and CFG values are PE OPTIONAL HEADER FLAGS ONLY.\n  CFG True does NOT establish CF Instrumented or FID table present.\n  Verify CFG independently using DUMPBIN /HEADERS /LOADCONFIG.\n  Missing mitigation flags are review points, not confirmed vulnerabilities.",
         "",
         "SUMMARY",
         "-" * width,
@@ -123,7 +123,7 @@ def run_pe_analysis(roots, assessment_dir, file_inventory=None):
         f"Files not analyzed    : {len(failed)}",
         f"ASLR missing          : {no_aslr}",
         f"DEP/NX missing        : {no_dep}",
-        f"CFG missing           : {no_cfg}",
+        f"CFG header flag absent: {no_cfg}",
         f".NET assemblies       : {dotnet_count}",
         f"Parse errors          : {len(failed)}",
         "",
@@ -173,8 +173,8 @@ def run_pe_analysis(roots, assessment_dir, file_inventory=None):
         findings.append({
             "title": "Control Flow Guard Coverage Requires Improvement",
             "severity": "Informational",
-            "description": "Control Flow Guard metadata is absent from one or more native binaries.",
-            "evidence": f"CFG missing from {len(cfg_weak)} of {len(parsed)} successfully analyzed PE file(s).",
+            "description": "The PE header GUARD_CF indicator is absent from one or more native binaries. DUMPBIN /HEADERS /LOADCONFIG is needed to evaluate CF Instrumented and FID table present on selected files.",
+            "evidence": f"CFG header flag absent from {len(cfg_weak)} of {len(parsed)} successfully analyzed PE file(s); CFG instrumentation not independently verified.",
             "recommendation": "Enable CFG for supported native components and document exceptions for third-party or compatibility-constrained binaries.",
         })
 

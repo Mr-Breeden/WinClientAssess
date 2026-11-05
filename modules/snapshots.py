@@ -473,6 +473,8 @@ def _append_mapping(lines, item, indent="    "):
 
 
 def _append_change_record(lines, number: int, item, change_type: str, *, unattributed=False):
+    if isinstance(item, dict) and _wca_temp_entry(item):
+        lines.append('    Attribution: WCA TEMP WORKER / FRAMEWORK ACTIVITY; not target-installed')
     lines.append(f"[{number:04d}] {change_type}")
     if unattributed:
         lines.append("    Attribution: WindowsApps / UNATTRIBUTED; correlate before linking to the target")
@@ -484,6 +486,20 @@ def _append_change_record(lines, number: int, item, change_type: str, *, unattri
     else:
         _append_mapping(lines, item, indent="    ")
     lines.append("")
+
+
+def _wca_temp_entry(item) -> bool:
+    """Only WCA-owned, nonce-prefixed worker directories are framework-origin.
+
+    Preserve raw snapshot evidence and provenance, but prevent our own worker
+    logs being described as target-installed files or directories.
+    """
+    if not isinstance(item, dict):
+        return False
+    if 'before' in item or 'after' in item:
+        return any(_wca_temp_entry(part) for part in (item.get('before'), item.get('after')))
+    path = str(item.get('Path') or '').replace('/', '\\').casefold()
+    return bool(re.search(r'\\wca-(?:gui|guided-runtime|guided-runtime-stage)-[a-z0-9_-]{4,}\\', path))
 
 
 def _windowsapps_entry(item) -> bool:
@@ -503,12 +519,15 @@ def _attribution_summary(filesystem: dict, width: int) -> list[str]:
     changed = filesystem.get("changed", [])
     windowsapps = [sum(_windowsapps_entry(item) for item in group)
                    for group in (added, removed, changed)]
-    other = [len(group) - count for group, count in zip((added, removed, changed), windowsapps)]
+    framework = [sum(_wca_temp_entry(item) for item in group)
+                 for group in (added, removed, changed)]
+    other = [max(0, len(group) - wa - fw) for group, wa, fw in zip((added, removed, changed), windowsapps, framework)]
     return ["", "FILESYSTEM ATTRIBUTION TRIAGE", "-" * width,
             "Snapshot differences are temporal observations, not proof the assessed target caused each change.",
             "WindowsApps activity is UNATTRIBUTED host activity unless separately correlated to the target.",
             f"{'Observed group':40} {'Added':>8} {'Removed':>8} {'Changed':>8}",
             f"{'WindowsApps (unattributed)':40} {windowsapps[0]:>8} {windowsapps[1]:>8} {windowsapps[2]:>8}",
+            f"{'WCA temporary worker (non-target)':40} {framework[0]:>8} {framework[1]:>8} {framework[2]:>8}",
             f"{'Other (still requires correlation)':40} {other[0]:>8} {other[1]:>8} {other[2]:>8}",
             "All observed changes remain in the detailed inventories and authoritative snapshots.", ""]
 
@@ -581,8 +600,8 @@ def write_snapshot_diff(diff, assessment_dir: Path):
         encoding="utf-8",
     )
 
-    added_files = [x for x in filesystem.get("added", []) if not x.get("IsDirectory")]
-    added_dirs = [x for x in filesystem.get("added", []) if x.get("IsDirectory")]
+    added_files = [x for x in filesystem.get("added", []) if not x.get("IsDirectory") and not _wca_temp_entry(x)]
+    added_dirs = [x for x in filesystem.get("added", []) if x.get("IsDirectory") and not _wca_temp_entry(x)]
     _write_items(
         artifact_path(assessment_dir, "installed_files.txt"),
         "Snapshot Added Files (Attribution Requires Correlation)",
@@ -644,9 +663,11 @@ def write_snapshot_diff(diff, assessment_dir: Path):
             # Show non-WindowsApps entries first; background-prone changes are
             # still retained in full but cannot swamp the target triage view.
             unrelated = [item for item in items if _windowsapps_entry(item)]
-            other = [item for item in items if not _windowsapps_entry(item)]
+            framework = [item for item in items if _wca_temp_entry(item)]
+            other = [item for item in items if not _windowsapps_entry(item) and not _wca_temp_entry(item)]
             for label, partition in (("OTHER CHANGES (ATTRIBUTION REQUIRES CORRELATION)", other),
-                                     ("WINDOWSAPPS (UNATTRIBUTED HOST ACTIVITY)", unrelated)):
+                                     ("WINDOWSAPPS (UNATTRIBUTED HOST ACTIVITY)", unrelated),
+                                     ("WCA TEMP WORKER (FRAMEWORK, NOT TARGET)", framework)):
                 if not partition:
                     continue
                 fs_lines += ["", f"{label}: {len(partition)}", "." * min(width, len(label) + 14)]

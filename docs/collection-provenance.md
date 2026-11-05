@@ -83,5 +83,5 @@ mean that a capture failed; inspect the capture and evidence reports.
   history for older assessments. Provenance source state is unchanged when
   the readable report presentation changes.
 
-For validation, see `docs/windows-validation.md` and the provenance regression
+For validation, see [Assessment Integrity](assessment-integrity.md) and the provenance regression
 tests. Run native Windows validation before treating this patch as a release.
